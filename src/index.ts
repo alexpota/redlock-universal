@@ -5,12 +5,18 @@
  */
 
 // Factory functions
-export { createLock, createLocks, createPrefixedLock } from './factory.js';
-export type { CreateLockConfig } from './factory.js';
+export {
+  createLock,
+  createLocks,
+  createPrefixedLock,
+  createRedlock,
+  createRedlocks,
+} from './factory.js';
+export type { CreateLockConfig, CreateRedlockConfig } from './factory.js';
 
 // Lock implementations
-export { SimpleLock } from './locks/index.js';
-export type { Lock, LockHandle, SimpleLockConfig } from './locks/index.js';
+export { SimpleLock, RedLock } from './locks/index.js';
+export type { Lock, LockHandle, SimpleLockConfig, RedLockConfig } from './locks/index.js';
 
 // Redis adapters
 export { BaseAdapter, NodeRedisAdapter, IoredisAdapter } from './adapters/index.js';
