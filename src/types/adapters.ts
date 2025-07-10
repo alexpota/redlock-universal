@@ -3,21 +3,18 @@
  */
 
 /**
- * Common Redis SET command options
+ * Configuration options for Redis adapters
  */
-export interface SetOptions {
-  /** Not eXists - Only set if key doesn't exist */
-  readonly NX?: boolean;
-  /** Set expiration in milliseconds */
-  readonly PX?: number;
-  /** Set expiration in seconds */
-  readonly EX?: number;
+export interface RedisAdapterOptions {
+  /** Prefix to add to all keys */
+  readonly keyPrefix?: string;
+  /** Maximum number of retries for failed operations */
+  readonly maxRetries?: number;
+  /** Delay between retries in milliseconds */
+  readonly retryDelay?: number;
+  /** Timeout for Redis operations in milliseconds */
+  readonly timeout?: number;
 }
-
-/**
- * Result of a SET operation
- */
-export type SetResult = 'OK' | null;
 
 /**
  * Universal Redis adapter interface
@@ -25,13 +22,13 @@ export type SetResult = 'OK' | null;
  */
 export interface RedisAdapter {
   /**
-   * Set a key-value pair with options
+   * Set key with value if not exists, with TTL in milliseconds
    * @param key - Redis key
    * @param value - Value to set
-   * @param options - SET command options
-   * @returns Promise resolving to 'OK' on success, null on failure
+   * @param ttl - Time to live in milliseconds
+   * @returns Promise resolving to 'OK' on success, null if key exists
    */
-  set(key: string, value: string, options?: SetOptions): Promise<SetResult>;
+  setNX(key: string, value: string, ttl: number): Promise<string | null>;
 
   /**
    * Get value by key
@@ -41,31 +38,37 @@ export interface RedisAdapter {
   get(key: string): Promise<string | null>;
 
   /**
-   * Delete keys
-   * @param keys - Keys to delete
+   * Delete key
+   * @param key - Key to delete
    * @returns Promise resolving to number of deleted keys
    */
-  del(...keys: string[]): Promise<number>;
+  del(key: string): Promise<number>;
 
   /**
-   * Execute Lua script
-   * @param script - Lua script
-   * @param keys - Keys for the script
-   * @param args - Arguments for the script
-   * @returns Promise resolving to script result
+   * Delete key only if value matches (atomic operation)
+   * @param key - Redis key
+   * @param value - Expected value
+   * @returns Promise resolving to true if deleted, false otherwise
    */
-  eval(script: string, keys: string[], args: string[]): Promise<unknown>;
+  delIfMatch(key: string, value: string): Promise<boolean>;
+
+  /**
+   * Ping Redis server
+   * @returns Promise resolving to 'PONG'
+   */
+  ping(): Promise<string>;
 
   /**
    * Check if adapter is connected
-   * @returns Promise resolving to connection status
+   * @returns Connection status
    */
-  isConnected(): Promise<boolean>;
+  isConnected(): boolean;
 
   /**
-   * Get adapter type for debugging
+   * Disconnect from Redis
+   * @returns Promise that resolves when disconnected
    */
-  readonly type: 'node-redis' | 'ioredis';
+  disconnect(): Promise<void>;
 }
 
 /**

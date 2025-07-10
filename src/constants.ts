@@ -8,19 +8,19 @@
 export const DEFAULTS = {
   /** Default lock TTL in milliseconds (30 seconds) */
   TTL: 30_000,
-  
+
   /** Default retry attempts */
   RETRY_ATTEMPTS: 3,
-  
+
   /** Default retry delay in milliseconds */
   RETRY_DELAY: 100,
-  
+
   /** Default clock drift factor for Redlock */
   CLOCK_DRIFT_FACTOR: 0.01,
-  
+
   /** Default monitoring interval in milliseconds (1 minute) */
   MONITORING_INTERVAL: 60_000,
-  
+
   /** Default health check interval in milliseconds (30 seconds) */
   HEALTH_CHECK_INTERVAL: 30_000,
 } as const;
@@ -37,7 +37,7 @@ export const LUA_SCRIPTS = {
       return 0
     end
   `.trim(),
-  
+
   /** Script to safely extend a lock (check value before extend) */
   EXTEND: `
     if redis.call("GET", KEYS[1]) == ARGV[1] then

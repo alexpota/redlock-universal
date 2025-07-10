@@ -3,19 +3,13 @@
  */
 
 // Core types
-export type { RedisAdapter, SetOptions, SetResult, AdapterFactory } from './adapters.js';
-export type { 
-  Lock, 
-  LockHandle, 
-  LockMetadata, 
-  SimpleLockConfig, 
-  RedLockConfig 
-} from './locks.js';
-export type { 
-  LockConfig, 
-  SimpleLockFactoryConfig, 
-  RedLockFactoryConfig, 
-  UniversalLockConfig 
+export type { RedisAdapter, RedisAdapterOptions, AdapterFactory } from './adapters.js';
+export type { Lock, LockHandle, LockMetadata, SimpleLockConfig, RedLockConfig } from './locks.js';
+export type {
+  LockConfig,
+  SimpleLockFactoryConfig,
+  RedLockFactoryConfig,
+  UniversalLockConfig,
 } from './config.js';
 export { isRedLockConfig, isSimpleLockConfig } from './config.js';
 

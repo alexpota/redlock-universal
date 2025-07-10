@@ -7,7 +7,7 @@
  */
 export abstract class RedlockError extends Error {
   abstract readonly code: string;
-  
+
   constructor(message: string, cause?: Error) {
     super(message);
     this.name = this.constructor.name;
@@ -22,7 +22,7 @@ export abstract class RedlockError extends Error {
  */
 export class LockAcquisitionError extends RedlockError {
   readonly code = 'LOCK_ACQUISITION_FAILED';
-  
+
   constructor(
     public readonly key: string,
     public readonly attempts: number,
@@ -42,16 +42,13 @@ export class LockAcquisitionError extends RedlockError {
  */
 export class LockReleaseError extends RedlockError {
   readonly code = 'LOCK_RELEASE_FAILED';
-  
+
   constructor(
     public readonly key: string,
     public readonly reason: 'not_found' | 'wrong_value' | 'redis_error',
     cause?: Error
   ) {
-    super(
-      `Failed to release lock "${key}": ${reason}${cause ? `: ${cause.message}` : ''}`,
-      cause
-    );
+    super(`Failed to release lock "${key}": ${reason}${cause ? `: ${cause.message}` : ''}`, cause);
   }
 }
 
@@ -60,16 +57,13 @@ export class LockReleaseError extends RedlockError {
  */
 export class LockExtensionError extends RedlockError {
   readonly code = 'LOCK_EXTENSION_FAILED';
-  
+
   constructor(
     public readonly key: string,
     public readonly reason: 'not_found' | 'wrong_value' | 'redis_error',
     cause?: Error
   ) {
-    super(
-      `Failed to extend lock "${key}": ${reason}${cause ? `: ${cause.message}` : ''}`,
-      cause
-    );
+    super(`Failed to extend lock "${key}": ${reason}${cause ? `: ${cause.message}` : ''}`, cause);
   }
 }
 
@@ -78,7 +72,7 @@ export class LockExtensionError extends RedlockError {
  */
 export class AdapterError extends RedlockError {
   readonly code = 'ADAPTER_ERROR';
-  
+
   constructor(message: string, cause?: Error) {
     super(`Redis adapter error: ${message}`, cause);
   }
@@ -89,7 +83,7 @@ export class AdapterError extends RedlockError {
  */
 export class ConfigurationError extends RedlockError {
   readonly code = 'CONFIGURATION_ERROR';
-  
+
   constructor(message: string) {
     super(`Configuration error: ${message}`);
   }

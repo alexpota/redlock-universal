@@ -10,13 +10,13 @@ import type { RedisAdapter } from './adapters.js';
 export interface LockConfig {
   /** Lock key */
   readonly key: string;
-  
+
   /** Time-to-live in milliseconds (default: 30000) */
   readonly ttl?: number;
-  
+
   /** Maximum retry attempts (default: 3) */
   readonly retryAttempts?: number;
-  
+
   /** Delay between retries in milliseconds (default: 100) */
   readonly retryDelay?: number;
 }
@@ -35,10 +35,10 @@ export interface SimpleLockFactoryConfig extends LockConfig {
 export interface RedLockFactoryConfig extends LockConfig {
   /** Array of Redis adapters */
   readonly adapters: readonly RedisAdapter[];
-  
+
   /** Minimum number of nodes for quorum (default: majority) */
   readonly quorum?: number;
-  
+
   /** Clock drift factor for Redlock algorithm (default: 0.01) */
   readonly clockDriftFactor?: number;
 }
