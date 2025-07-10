@@ -1,0 +1,8 @@
+# Run type checking first (fast fail)
+npm run type-check
+
+# Run lint-staged for efficient validation of changed files
+npx lint-staged
+
+# Run unit tests only (skip integration tests that need Redis)
+npm run test -- --run tests/utils/ tests/adapters/BaseAdapter.test.ts
