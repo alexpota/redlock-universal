@@ -125,8 +125,11 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       this.client.disconnect();
     } catch (error) {
-      // Log but don't throw on disconnect errors
-      console.warn(`Warning during disconnect: ${(error as Error).message}`);
+      // Silently handle disconnect errors - they're not critical
+      // In production environments, this prevents noise in logs
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`Warning during disconnect: ${(error as Error).message}`);
+      }
     }
   }
 

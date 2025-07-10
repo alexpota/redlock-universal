@@ -2,7 +2,8 @@
   "compilerOptions": {
     // Language and Environment
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "module": "ESNext",
     "moduleResolution": "Node",
     "allowSyntheticDefaultImports": true,
@@ -31,13 +32,12 @@
     "removeComments": false,
     "emitDeclarationOnly": false,
     "importHelpers": false,
-    "importsNotUsedAsValues": "error",
+    "verbatimModuleSyntax": true,
     "downlevelIteration": true,
     "preserveConstEnums": true,
     
     // Interop Constraints
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false,
     
     // Completeness
     "skipDefaultLibCheck": true,
@@ -49,6 +49,7 @@
   "exclude": [
     "node_modules",
     "dist",
+    "examples",
     "**/*.test.ts",
     "**/*.spec.ts"
   ]

@@ -17,11 +17,11 @@ describe('Redis Adapter Integration Tests', () => {
   beforeAll(async () => {
     // Setup node-redis client
     nodeRedisClient = createNodeRedisClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379'
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
     });
     await nodeRedisClient.connect();
 
-    // Setup ioredis client  
+    // Setup ioredis client
     ioredisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
     // Create adapters
@@ -42,7 +42,7 @@ describe('Redis Adapter Integration Tests', () => {
 
   describe.each([
     ['NodeRedisAdapter', () => nodeAdapter],
-    ['IoredisAdapter', () => ioAdapter]
+    ['IoredisAdapter', () => ioAdapter],
   ])('%s', (adapterName, getAdapter) => {
     let adapter: RedisAdapter;
 
@@ -118,7 +118,7 @@ describe('Redis Adapter Integration Tests', () => {
     describe('del', () => {
       it('should delete existing key', async () => {
         await adapter.setNX(testKey, testValue, testTTL);
-        
+
         const deleteCount = await adapter.del(testKey);
         expect(deleteCount).toBe(1);
 
@@ -135,7 +135,7 @@ describe('Redis Adapter Integration Tests', () => {
     describe('delIfMatch', () => {
       it('should delete key when value matches', async () => {
         await adapter.setNX(testKey, testValue, testTTL);
-        
+
         const deleted = await adapter.delIfMatch(testKey, testValue);
         expect(deleted).toBe(true);
 
@@ -145,7 +145,7 @@ describe('Redis Adapter Integration Tests', () => {
 
       it('should not delete key when value does not match', async () => {
         await adapter.setNX(testKey, testValue, testTTL);
-        
+
         const deleted = await adapter.delIfMatch(testKey, 'wrong-value');
         expect(deleted).toBe(false);
 
@@ -161,42 +161,48 @@ describe('Redis Adapter Integration Tests', () => {
 
     describe('key prefix', () => {
       it('should use key prefix when configured', async () => {
-        const prefixedAdapter = adapterName === 'NodeRedisAdapter' 
-          ? new NodeRedisAdapter(nodeRedisClient, { keyPrefix: 'test:' })
-          : new IoredisAdapter(ioredisClient, { keyPrefix: 'test:' });
+        const prefixedAdapter =
+          adapterName === 'NodeRedisAdapter'
+            ? new NodeRedisAdapter(nodeRedisClient, { keyPrefix: 'test:' })
+            : new IoredisAdapter(ioredisClient, { keyPrefix: 'test:' });
 
         await prefixedAdapter.setNX('my-key', testValue, testTTL);
 
         // Check that the prefixed key exists
-        const directValue = adapterName === 'NodeRedisAdapter'
-          ? await nodeRedisClient.get('test:my-key')
-          : await ioredisClient.get('test:my-key');
-        
+        const directValue =
+          adapterName === 'NodeRedisAdapter'
+            ? await nodeRedisClient.get('test:my-key')
+            : await ioredisClient.get('test:my-key');
+
         expect(directValue).toBe(testValue);
 
         // Check that unprefixed key does not exist
-        const unprefixedValue = adapterName === 'NodeRedisAdapter'
-          ? await nodeRedisClient.get('my-key')
-          : await ioredisClient.get('my-key');
-        
+        const unprefixedValue =
+          adapterName === 'NodeRedisAdapter'
+            ? await nodeRedisClient.get('my-key')
+            : await ioredisClient.get('my-key');
+
         expect(unprefixedValue).toBeNull();
       });
     });
 
     describe('error handling', () => {
       it('should validate key format', async () => {
-        await expect(adapter.setNX('', testValue, testTTL))
-          .rejects.toThrow('Lock key must be a non-empty string');
+        await expect(adapter.setNX('', testValue, testTTL)).rejects.toThrow(
+          'Lock key must be a non-empty string'
+        );
       });
 
       it('should validate value format', async () => {
-        await expect(adapter.setNX(testKey, '', testTTL))
-          .rejects.toThrow('Lock value must be a non-empty string');
+        await expect(adapter.setNX(testKey, '', testTTL)).rejects.toThrow(
+          'Lock value must be a non-empty string'
+        );
       });
 
       it('should validate TTL format', async () => {
-        await expect(adapter.setNX(testKey, testValue, -1))
-          .rejects.toThrow('TTL must be a positive integer');
+        await expect(adapter.setNX(testKey, testValue, -1)).rejects.toThrow(
+          'TTL must be a positive integer'
+        );
       });
     });
   });

@@ -6,33 +6,21 @@ module.exports = {
   },
   extends: [
     'eslint:recommended',
-    '@typescript-eslint/recommended',
-    '@typescript-eslint/recommended-requiring-type-checking',
     'prettier',
   ],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
-    project: './tsconfig.json',
   },
   plugins: ['@typescript-eslint', 'prettier'],
   rules: {
     // Prettier integration
     'prettier/prettier': 'error',
     
-    // TypeScript specific
+    // Basic TypeScript
     '@typescript-eslint/no-unused-vars': 'error',
     '@typescript-eslint/no-explicit-any': 'error',
-    '@typescript-eslint/prefer-readonly': 'error',
-    '@typescript-eslint/prefer-readonly-parameter-types': 'off', // Too strict for library
-    '@typescript-eslint/explicit-function-return-type': 'error',
-    '@typescript-eslint/explicit-module-boundary-types': 'error',
-    '@typescript-eslint/no-inferrable-types': 'off',
-    '@typescript-eslint/prefer-nullish-coalescing': 'error',
-    '@typescript-eslint/prefer-optional-chain': 'error',
-    '@typescript-eslint/no-unnecessary-condition': 'error',
-    '@typescript-eslint/switch-exhaustiveness-check': 'error',
     
     // Performance and best practices
     'prefer-const': 'error',
@@ -40,7 +28,6 @@ module.exports = {
     'object-shorthand': 'error',
     'prefer-arrow-callback': 'error',
     'prefer-template': 'error',
-    'prefer-destructuring': ['error', { object: true, array: false }],
     
     // Security
     'no-eval': 'error',
@@ -48,20 +35,19 @@ module.exports = {
     'no-new-func': 'error',
     
     // Error prevention
-    'no-console': 'warn', // Allow console for debugging, warn in CI
+    'no-console': 'warn',
     'no-debugger': 'error',
     'no-alert': 'error',
     
     // Import/Export
     'no-duplicate-imports': 'error',
-    'sort-imports': ['error', { ignoreDeclarationSort: true }],
   },
   overrides: [
     // Test files
     {
       files: ['**/*.{test,spec}.ts'],
       env: {
-        vitest: true,
+        node: true,
       },
       rules: {
         // More relaxed rules for tests

@@ -7,6 +7,7 @@
  */
 export abstract class RedlockError extends Error {
   abstract readonly code: string;
+  declare public cause?: Error;
 
   constructor(message: string, cause?: Error) {
     super(message);

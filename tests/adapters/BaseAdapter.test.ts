@@ -8,13 +8,25 @@ class TestAdapter extends BaseAdapter {
     super(options);
   }
 
-  async setNX(): Promise<string | null> { return 'OK'; }
-  async get(): Promise<string | null> { return null; }
-  async del(): Promise<number> { return 0; }
-  async delIfMatch(): Promise<boolean> { return false; }
-  async ping(): Promise<string> { return 'PONG'; }
-  isConnected(): boolean { return true; }
-  async disconnect(): Promise<void> { }
+  async setNX(): Promise<string | null> {
+    return 'OK';
+  }
+  async get(): Promise<string | null> {
+    return null;
+  }
+  async del(): Promise<number> {
+    return 0;
+  }
+  async delIfMatch(): Promise<boolean> {
+    return false;
+  }
+  async ping(): Promise<string> {
+    return 'PONG';
+  }
+  isConnected(): boolean {
+    return true;
+  }
+  async disconnect(): Promise<void> {}
 
   // Expose protected methods for testing
   public testValidateKey(key: string): void {
@@ -53,9 +65,9 @@ describe('BaseAdapter', () => {
         keyPrefix: 'test:',
         maxRetries: 5,
         retryDelay: 200,
-        timeout: 10000
+        timeout: 10000,
       };
-      
+
       const adapter = new TestAdapter(options);
       expect(adapter['options'].keyPrefix).toBe('test:');
       expect(adapter['options'].maxRetries).toBe(5);
@@ -75,20 +87,30 @@ describe('BaseAdapter', () => {
     it('should reject empty or invalid keys', () => {
       const adapter = new TestAdapter();
       expect(() => adapter.testValidateKey('')).toThrow('Lock key must be a non-empty string');
-      expect(() => adapter.testValidateKey(null as any)).toThrow('Lock key must be a non-empty string');
-      expect(() => adapter.testValidateKey(undefined as any)).toThrow('Lock key must be a non-empty string');
+      expect(() => adapter.testValidateKey(null as any)).toThrow(
+        'Lock key must be a non-empty string'
+      );
+      expect(() => adapter.testValidateKey(undefined as any)).toThrow(
+        'Lock key must be a non-empty string'
+      );
     });
 
     it('should reject keys that are too long', () => {
       const adapter = new TestAdapter();
       const longKey = 'a'.repeat(513);
-      expect(() => adapter.testValidateKey(longKey)).toThrow('Lock key must be less than 512 characters');
+      expect(() => adapter.testValidateKey(longKey)).toThrow(
+        'Lock key must be less than 512 characters'
+      );
     });
 
     it('should reject keys with newlines', () => {
       const adapter = new TestAdapter();
-      expect(() => adapter.testValidateKey('key\\nwith\\nnewlines')).toThrow('Lock key cannot contain newline characters');
-      expect(() => adapter.testValidateKey('key\\rwith\\rcarriagereturns')).toThrow('Lock key cannot contain newline characters');
+      expect(() => adapter.testValidateKey('key\nwith\nnewlines')).toThrow(
+        'Lock key cannot contain newline characters'
+      );
+      expect(() => adapter.testValidateKey('key\rwith\rcarriagereturns')).toThrow(
+        'Lock key cannot contain newline characters'
+      );
     });
   });
 
@@ -102,13 +124,17 @@ describe('BaseAdapter', () => {
     it('should reject empty or invalid values', () => {
       const adapter = new TestAdapter();
       expect(() => adapter.testValidateValue('')).toThrow('Lock value must be a non-empty string');
-      expect(() => adapter.testValidateValue(null as any)).toThrow('Lock value must be a non-empty string');
+      expect(() => adapter.testValidateValue(null as any)).toThrow(
+        'Lock value must be a non-empty string'
+      );
     });
 
     it('should reject values that are too long', () => {
       const adapter = new TestAdapter();
       const longValue = 'a'.repeat(1025);
-      expect(() => adapter.testValidateValue(longValue)).toThrow('Lock value must be less than 1024 characters');
+      expect(() => adapter.testValidateValue(longValue)).toThrow(
+        'Lock value must be less than 1024 characters'
+      );
     });
   });
 
@@ -150,7 +176,7 @@ describe('BaseAdapter', () => {
     it('should resolve when operation completes before timeout', async () => {
       const adapter = new TestAdapter();
       const operation = Promise.resolve('success');
-      
+
       const result = await adapter.testWithTimeout(operation, 1000);
       expect(result).toBe('success');
     });
@@ -158,17 +184,19 @@ describe('BaseAdapter', () => {
     it('should reject when operation times out', async () => {
       const adapter = new TestAdapter();
       const operation = new Promise(resolve => setTimeout(() => resolve('late'), 200));
-      
-      await expect(adapter.testWithTimeout(operation, 100))
-        .rejects.toThrow('Operation timed out after 100ms');
+
+      await expect(adapter.testWithTimeout(operation, 100)).rejects.toThrow(
+        'Operation timed out after 100ms'
+      );
     });
 
     it('should use default timeout when not specified', async () => {
       const adapter = new TestAdapter({ timeout: 100 });
       const operation = new Promise(resolve => setTimeout(() => resolve('late'), 200));
-      
-      await expect(adapter.testWithTimeout(operation))
-        .rejects.toThrow('Operation timed out after 100ms');
+
+      await expect(adapter.testWithTimeout(operation)).rejects.toThrow(
+        'Operation timed out after 100ms'
+      );
     });
   });
 });
