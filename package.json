@@ -1,0 +1,90 @@
+{
+  "name": "redlock-universal",
+  "version": "0.1.0",
+  "description": "Enterprise-grade distributed Redis locks for Node.js with support for both node-redis and ioredis",
+  "keywords": [
+    "redis",
+    "redlock",
+    "distributed",
+    "lock",
+    "mutex",
+    "enterprise",
+    "node-redis",
+    "ioredis",
+    "typescript"
+  ],
+  "author": "Alex Potapenko <alex.potapenko.dev@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/alexpota/redlock-universal#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexpota/redlock-universal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexpota/redlock-universal/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "test:ci": "vitest --run --coverage",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "type-check": "tsc --noEmit",
+    "format": "prettier --write src/**/*.ts",
+    "format:check": "prettier --check src/**/*.ts",
+    "docs": "typedoc src/index.ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run test:ci && npm run lint",
+    "release": "npm version patch && npm publish"
+  },
+  "peerDependencies": {
+    "redis": ">=4.0.0",
+    "ioredis": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "redis": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "ioredis": "^5.3.0",
+    "prettier": "^3.0.0",
+    "redis": "^4.7.0",
+    "tsup": "^8.0.0",
+    "typedoc": "^0.25.0",
+    "typescript": "^5.2.0",
+    "vitest": "^1.0.0"
+  }
+}
