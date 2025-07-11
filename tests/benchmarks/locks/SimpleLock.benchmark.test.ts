@@ -55,7 +55,7 @@ describe('SimpleLock Performance Benchmarks', () => {
       console.log(`  Min: ${Math.min(...times).toFixed(2)}ms`);
       console.log(`  Max: ${Math.max(...times).toFixed(2)}ms`);
 
-      // Performance targets from CLAUDE.md
+      // Performance targets for production systems
       expect(avgTime).toBeLessThan(10); // Average should be under 10ms
       expect(p99Time).toBeLessThan(100); // 99th percentile should be under 100ms
     });

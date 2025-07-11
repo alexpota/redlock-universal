@@ -1,6 +1,6 @@
 # Test Structure
 
-This directory contains comprehensive tests for the RedLock Universal library, organized following Node.js best practices and the guidelines from CLAUDE.md.
+This directory contains comprehensive tests for the RedLock Universal library, organized following Node.js best practices and enterprise development guidelines.
 
 ## Test Organization
 
@@ -89,7 +89,7 @@ npm run test:e2e:watch
 
 ## Test Philosophy
 
-Following CLAUDE.md guidelines:
+Following enterprise development guidelines:
 
 ### 🎯 **Test Behavior, Not Implementation**
 - Focus on what the code does, not how it does it
@@ -169,7 +169,7 @@ describe('ComponentName Integration Tests', () => {
 
 ## Performance Targets
 
-From CLAUDE.md requirements:
+Performance requirements:
 
 - **Lock Acquisition**: <1ms (99th percentile)
 - **Throughput**: >100 operations/second
