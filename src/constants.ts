@@ -15,6 +15,9 @@ export const DEFAULTS = {
   /** Default retry delay in milliseconds */
   RETRY_DELAY: 100,
 
+  /** Default Redis command timeout in milliseconds */
+  REDIS_TIMEOUT: 5_000,
+
   /** Default clock drift factor for Redlock */
   CLOCK_DRIFT_FACTOR: 0.01,
 
@@ -23,6 +26,12 @@ export const DEFAULTS = {
 
   /** Default health check interval in milliseconds (30 seconds) */
   HEALTH_CHECK_INTERVAL: 30_000,
+
+  /** Circuit breaker failure threshold */
+  CIRCUIT_BREAKER_THRESHOLD: 5,
+
+  /** Circuit breaker timeout in milliseconds (1 minute) */
+  CIRCUIT_BREAKER_TIMEOUT: 60_000,
 } as const;
 
 /**

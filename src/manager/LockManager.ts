@@ -171,7 +171,6 @@ export class LockManager {
       this.stats.acquiredLocks++;
       this.stats.activeLocks++;
 
-      // Track the lock
       this.activeLocks.set(handle.id, handle);
 
       return handle;
@@ -188,11 +187,8 @@ export class LockManager {
     const holdTime = Date.now() - handle.acquiredAt;
     this.stats.holdTimes.push(holdTime);
 
-    // Remove from tracking
     this.activeLocks.delete(handle.id);
     this.stats.activeLocks--;
-
-    // Create appropriate lock instance and release
     const lock =
       handle.metadata?.strategy === 'redlock'
         ? this.createRedLock(handle.key)

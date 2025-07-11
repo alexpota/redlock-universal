@@ -1,4 +1,5 @@
 import type { RedisAdapter, RedisAdapterOptions } from '../types/adapters.js';
+import { DEFAULTS } from '../constants.js';
 
 /**
  * Base adapter class providing common functionality for all Redis clients.
@@ -11,8 +12,8 @@ export abstract class BaseAdapter implements RedisAdapter {
     this.options = {
       keyPrefix: options.keyPrefix ?? '',
       maxRetries: options.maxRetries ?? 3,
-      retryDelay: options.retryDelay ?? 100,
-      timeout: options.timeout ?? 5000,
+      retryDelay: options.retryDelay ?? DEFAULTS.RETRY_DELAY,
+      timeout: options.timeout ?? DEFAULTS.REDIS_TIMEOUT,
       ...options,
     };
   }

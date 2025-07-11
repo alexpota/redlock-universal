@@ -65,7 +65,6 @@ export function parseLockValue(value: string): {
     return null;
   }
 
-  // Validate timestamp string contains only digits
   if (!/^\d+$/.test(timestampStr)) {
     return null;
   }
@@ -87,12 +86,10 @@ export function isValidLockValue(value: string): boolean {
     return false;
   }
 
-  // Check length (reasonable bounds)
   if (value.length < 8 || value.length > 256) {
     return false;
   }
 
-  // Check for unsafe characters
   if (value.includes('\n') || value.includes('\r') || value.includes('\0')) {
     return false;
   }

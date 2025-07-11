@@ -20,31 +20,24 @@ export class SimpleLock implements Lock {
   private readonly onRelease?: (handle: LockHandle) => void;
   private _configCache?: Readonly<SimpleLockConfig>;
 
-  // Connection health monitoring
   private _lastHealthCheck: number = 0;
-  private _healthCheckInterval: number = 30000; // 30 seconds
+  private _healthCheckInterval: number = DEFAULTS.HEALTH_CHECK_INTERVAL;
   private _isHealthy: boolean = true;
 
-  // Circuit breaker pattern for Redis failures
   private _circuitBreakerFailures: number = 0;
-  private _circuitBreakerThreshold: number = 5; // Open circuit after 5 failures
-  private _circuitBreakerTimeout: number = 60000; // 1 minute timeout
+  private _circuitBreakerThreshold: number = DEFAULTS.CIRCUIT_BREAKER_THRESHOLD;
+  private _circuitBreakerTimeout: number = DEFAULTS.CIRCUIT_BREAKER_TIMEOUT;
   private _circuitBreakerOpenedAt: number = 0;
   private _circuitBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
 
-  // Memory optimization: cache frequently used strings (removed unused)
-
-  // Memory optimization: reuse metadata object template
   private readonly _metadataTemplate: {
     strategy: 'simple';
     correlationId?: string;
   };
 
   constructor(config: SimpleLockConfig) {
-    // Validate first to avoid storing invalid config
     this.validateConfig(config);
 
-    // Store only what we need, not the entire config
     this.adapter = config.adapter;
     this.key = config.key;
     this.ttl = config.ttl ?? DEFAULTS.TTL;
@@ -57,7 +50,6 @@ export class SimpleLock implements Lock {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.onRelease = (config as any).onRelease;
 
-    // Initialize metadata template after correlationId is set
     this._metadataTemplate = Object.freeze({
       strategy: 'simple' as const,
       ...(this.correlationId && { correlationId: this.correlationId }),
@@ -95,7 +87,6 @@ export class SimpleLock implements Lock {
     const now = Date.now();
 
     if (isSuccess) {
-      // Success - reset failure count and close circuit
       this._circuitBreakerFailures = 0;
       if (this._circuitBreakerState === 'half-open') {
         this._circuitBreakerState = 'closed';
@@ -109,14 +100,12 @@ export class SimpleLock implements Lock {
         }
       }
     } else {
-      // Failure - increment failure count
       this._circuitBreakerFailures++;
 
       if (
         this._circuitBreakerState === 'closed' &&
         this._circuitBreakerFailures >= this._circuitBreakerThreshold
       ) {
-        // Open circuit breaker
         this._circuitBreakerState = 'open';
         this._circuitBreakerOpenedAt = now;
         if (process.env.NODE_ENV !== 'test') {
@@ -131,7 +120,6 @@ export class SimpleLock implements Lock {
       }
     }
 
-    // Check if circuit should transition to half-open
     if (
       this._circuitBreakerState === 'open' &&
       now - this._circuitBreakerOpenedAt > this._circuitBreakerTimeout
@@ -161,7 +149,7 @@ export class SimpleLock implements Lock {
   private async checkConnectionHealth(): Promise<void> {
     const now = Date.now();
     if (now - this._lastHealthCheck < this._healthCheckInterval) {
-      return; // Skip if checked recently
+      return;
     }
 
     this._lastHealthCheck = now;
@@ -171,7 +159,6 @@ export class SimpleLock implements Lock {
       this.updateCircuitBreaker(true);
       if (!this._isHealthy) {
         this._isHealthy = true;
-        // Log recovery if previously unhealthy
         if (process.env.NODE_ENV !== 'test') {
           // eslint-disable-next-line no-console
           console.log('Redis connection recovered', {
@@ -184,7 +171,6 @@ export class SimpleLock implements Lock {
     } catch (error) {
       this._isHealthy = false;
       this.updateCircuitBreaker(false);
-      // Log health check failure
       if (process.env.NODE_ENV !== 'test') {
         // eslint-disable-next-line no-console
         console.error('Redis health check failed', {
@@ -201,7 +187,6 @@ export class SimpleLock implements Lock {
    * Attempt to acquire the lock
    */
   async acquire(): Promise<LockHandle> {
-    // Check circuit breaker first
     if (this.isCircuitBreakerOpen()) {
       throw new LockAcquisitionError(
         this.key,
@@ -210,7 +195,6 @@ export class SimpleLock implements Lock {
       );
     }
 
-    // Check connection health before attempting lock
     await this.checkConnectionHealth();
 
     const startTime = Date.now();
@@ -221,14 +205,12 @@ export class SimpleLock implements Lock {
       try {
         const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
 
-        // Update circuit breaker on success
         this.updateCircuitBreaker(true);
 
         if (result === 'OK') {
           const acquisitionTime = Date.now() - startTime;
           const acquiredAt = Date.now();
 
-          // Memory optimization: create minimal handle object
           const handle: LockHandle = {
             id: generateLockId(),
             key: this.key,
@@ -242,23 +224,19 @@ export class SimpleLock implements Lock {
             },
           };
 
-          // Metrics hook for monitoring
           this.onAcquire?.(handle);
 
           return handle;
         }
 
-        // Lock already exists, prepare for retry
         if (!lastError) {
           lastError = new Error(`Lock "${this.key}" is already held`);
         }
       } catch (error) {
         lastError = error as Error;
 
-        // Update circuit breaker on failure
         this.updateCircuitBreaker(false);
 
-        // Log Redis connection issues immediately for production monitoring
         if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {
           // eslint-disable-next-line no-console
           console.error('Redis connection failed for lock', {
@@ -272,7 +250,6 @@ export class SimpleLock implements Lock {
         }
       }
 
-      // Wait before retrying (except on last attempt)
       if (attempt < this.retryAttempts) {
         await this.sleep(this.retryDelay);
       }
@@ -294,7 +271,6 @@ export class SimpleLock implements Lock {
     try {
       const released = await this.adapter.delIfMatch(handle.key, handle.value);
 
-      // Metrics hook for monitoring
       this.onRelease?.(handle);
 
       return released;
@@ -329,7 +305,6 @@ export class SimpleLock implements Lock {
       const value = await this.adapter.get(key);
       return value !== null;
     } catch (error) {
-      // If we can't check, assume it's not locked rather than throwing
       return false;
     }
   }
