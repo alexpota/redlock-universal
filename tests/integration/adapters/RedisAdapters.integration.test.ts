@@ -3,6 +3,7 @@ import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { NodeRedisAdapter, IoredisAdapter } from '../../../src/adapters/index.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
+import { TEST_CONFIG, generateTestKey, getRedisUrl } from '../../shared/constants.js';
 
 describe('Redis Adapter Integration Tests', () => {
   let nodeRedisClient: any;
@@ -10,20 +11,19 @@ describe('Redis Adapter Integration Tests', () => {
   let nodeAdapter: RedisAdapter;
   let ioAdapter: RedisAdapter;
 
-  const getTestKey = () =>
-    `test-lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
+  const getTestKey = () => generateTestKey('test-lock');
   const testValue = 'unique-lock-value';
-  const testTTL = 5000;
+  const testTTL = TEST_CONFIG.DEFAULT_TTL;
 
   beforeAll(async () => {
     // Setup node-redis client
     nodeRedisClient = createNodeRedisClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: getRedisUrl(),
     });
     await nodeRedisClient.connect();
 
     // Setup ioredis client
-    ioredisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    ioredisClient = new Redis(getRedisUrl());
 
     // Create adapters
     nodeAdapter = new NodeRedisAdapter(nodeRedisClient);

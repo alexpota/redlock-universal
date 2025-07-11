@@ -12,8 +12,9 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',
+    project: './tsconfig.json',
   },
-  plugins: ['@typescript-eslint', 'prettier'],
+  plugins: ['@typescript-eslint', 'prettier', 'deprecation', 'sonarjs'],
   rules: {
     // Prettier integration
     'prettier/prettier': 'error',
@@ -41,30 +42,52 @@ module.exports = {
     
     // Import/Export
     'no-duplicate-imports': 'error',
+    
+    // Deprecated methods and APIs
+    'deprecation/deprecation': 'error',
+    
+    // String methods
+    '@typescript-eslint/prefer-string-starts-ends-with': 'error',
+    
+    // Code quality and duplication detection
+    'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
+    'sonarjs/no-duplicated-branches': 'error',
+    'sonarjs/no-identical-functions': 'error',
   },
   overrides: [
     // Test files
     {
-      files: ['**/*.{test,spec}.ts'],
+      files: ['**/*.{test,spec}.ts', 'tests/**/*.ts'],
       env: {
         node: true,
+      },
+      parserOptions: {
+        project: null, // Disable project for test files to avoid TSConfig issues
       },
       rules: {
         // More relaxed rules for tests
         '@typescript-eslint/no-explicit-any': 'off',
         '@typescript-eslint/no-non-null-assertion': 'off',
         'no-console': 'off',
+        'deprecation/deprecation': 'off', // Disable deprecation rule for tests since project is null
+        '@typescript-eslint/prefer-string-starts-ends-with': 'off', // Disable TypeScript rules requiring project
+        'sonarjs/no-duplicate-string': 'off', // Disable for test files - less critical than source code
       },
     },
-    // Config files
+    // Config files and examples
     {
-      files: ['*.config.{js,ts,cjs,mjs}', '.eslintrc.cjs'],
+      files: ['*.config.{js,ts,cjs,mjs}', '.eslintrc.cjs', 'examples/**/*.ts'],
       env: {
         node: true,
+      },
+      parserOptions: {
+        project: null, // Disable project for config files and examples
       },
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
         'no-console': 'off',
+        'deprecation/deprecation': 'off',
+        '@typescript-eslint/prefer-string-starts-ends-with': 'off',
       },
     },
   ],

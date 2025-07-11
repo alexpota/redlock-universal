@@ -2,7 +2,7 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { LockHandle } from '../types/locks.js';
 import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
-import { DEFAULTS } from '../constants.js';
+import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 /**
  * Configuration for LockManager
@@ -245,7 +245,7 @@ export class LockManager {
           return {
             index,
             healthy: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
           };
         }
       })

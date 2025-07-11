@@ -3,6 +3,7 @@ import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
 import type { RedLockConfig } from '../../../src/types/locks.js';
+import { generateTestKey, TEST_STRINGS } from '../../shared/constants.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -123,8 +124,7 @@ class MockRedisAdapter implements RedisAdapter {
 describe('RedLock', () => {
   let adapters: MockRedisAdapter[];
   let redlock: RedLock;
-  const getTestKey = () =>
-    `test:redlock:key:${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
+  const getTestKey = () => generateTestKey('test:redlock:key');
 
   beforeEach(() => {
     // Create 5 mock adapters for comprehensive testing
@@ -321,7 +321,7 @@ describe('RedLock', () => {
       expect(handle).toBeDefined();
 
       // Verify lock acquired on available nodes
-      const lockedNodesWithCorrectValue = [];
+      const lockedNodesWithCorrectValue: MockRedisAdapter[] = [];
       for (const adapter of adapters) {
         if (adapter.hasKey(testKey)) {
           const value = await adapter.get(testKey);
@@ -464,14 +464,14 @@ describe('RedLock', () => {
     it('should handle partial lock states', async () => {
       // Manually set locks on some nodes
       const testKey = redlock.getConfig().key;
-      await adapters[0].setNX(testKey, 'some-value', 10000);
-      await adapters[1].setNX(testKey, 'some-value', 10000);
+      await adapters[0].setNX(testKey, TEST_STRINGS.SOME_VALUE, 10000);
+      await adapters[1].setNX(testKey, TEST_STRINGS.SOME_VALUE, 10000);
 
       const isLocked = await redlock.isLocked(testKey);
       expect(isLocked).toBe(false); // Less than quorum
 
       // Add one more to reach quorum
-      await adapters[2].setNX(testKey, 'some-value', 10000);
+      await adapters[2].setNX(testKey, TEST_STRINGS.SOME_VALUE, 10000);
 
       const isLockedWithQuorum = await redlock.isLocked(testKey);
       expect(isLockedWithQuorum).toBe(true);

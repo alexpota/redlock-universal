@@ -12,6 +12,7 @@ import {
   IoredisAdapter,
   LockAcquisitionError,
   type LockHandle,
+  RedLock,
 } from '../src/index.js';
 
 /**
@@ -106,7 +107,9 @@ async function mixedClientsExample() {
 
     const handle = await redlock.acquire();
     console.log('✅ Distributed lock acquired across mixed clients!');
-    console.log(`Quorum achieved: ${handle.metadata?.nodes?.length}/${redlock.getQuorum()}`);
+    console.log(
+      `Quorum achieved: ${handle.metadata?.nodes?.length}/${(redlock as RedLock).getAdapters().length}`
+    );
 
     // Extend the lock
     console.log('Extending lock TTL...');
@@ -300,8 +303,7 @@ async function productionPatternExample() {
 
       // Simulate payment processing work
       console.log('Processing payment...');
-      await simulatePaymentProcessing(handle, redlock);
-
+      await simulatePaymentProcessing(handle, redlock as RedLock);
       console.log('✅ Payment processed successfully');
     } catch (error) {
       if (error instanceof LockAcquisitionError) {
@@ -331,7 +333,7 @@ async function productionPatternExample() {
 /**
  * Simulate payment processing with lock extension
  */
-async function simulatePaymentProcessing(handle: LockHandle, redlock: any) {
+async function simulatePaymentProcessing(handle: LockHandle, redlock: RedLock) {
   for (let step = 1; step <= 3; step++) {
     console.log(`Payment step ${step}/3...`);
 

@@ -3,6 +3,7 @@ import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { SimpleLock, NodeRedisAdapter, IoredisAdapter, createLock } from '../../../src/index.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
+import { TEST_CONFIG, generateTestKey, getRedisUrl } from '../../shared/constants.js';
 
 describe('SimpleLock Integration Tests', () => {
   let nodeRedisClient: any;
@@ -10,19 +11,18 @@ describe('SimpleLock Integration Tests', () => {
   let nodeAdapter: RedisAdapter;
   let ioAdapter: RedisAdapter;
 
-  const testTTL = 5000;
-  const getTestKey = () =>
-    `test-simple-lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
+  const testTTL = TEST_CONFIG.DEFAULT_TTL;
+  const getTestKey = () => generateTestKey('test-simple-lock');
 
   beforeAll(async () => {
     // Setup node-redis client
     nodeRedisClient = createNodeRedisClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: getRedisUrl(),
     });
     await nodeRedisClient.connect();
 
     // Setup ioredis client
-    ioredisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    ioredisClient = new Redis(getRedisUrl());
 
     // Create adapters
     nodeAdapter = new NodeRedisAdapter(nodeRedisClient);

@@ -58,6 +58,13 @@ export const LUA_SCRIPTS = {
 } as const;
 
 /**
+ * Error messages
+ */
+export const ERROR_MESSAGES = {
+  UNKNOWN_ERROR: 'Unknown error',
+} as const;
+
+/**
  * Library metadata
  */
 export const LIBRARY_INFO = {

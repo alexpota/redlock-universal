@@ -7,7 +7,7 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, RedLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockId, generateLockValue, safeCompare } from '../utils/crypto.js';
-import { DEFAULTS } from '../constants.js';
+import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 /**
  * Result of attempting to acquire a lock on a single Redis node
@@ -119,7 +119,7 @@ export class RedLock implements Lock {
         // Release any partial locks acquired
         await this.releasePartialLocks(result.nodeResults, lockValue);
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unknown error');
+        lastError = error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR);
       }
 
       // Wait before retrying (except on last attempt)
@@ -131,7 +131,7 @@ export class RedLock implements Lock {
     throw new LockAcquisitionError(
       this.config.key,
       this.config.retryAttempts + 1,
-      lastError || new Error('Unknown error')
+      lastError || new Error(ERROR_MESSAGES.UNKNOWN_ERROR)
     );
   }
 
@@ -223,7 +223,7 @@ export class RedLock implements Lock {
         success: false,
         adapter,
         nodeId,
-        error: error instanceof Error ? error : new Error('Unknown error'),
+        error: error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR),
         operationTime,
       };
     }
@@ -270,7 +270,7 @@ export class RedLock implements Lock {
       throw new LockReleaseError(
         handle.key,
         'redis_error',
-        error instanceof Error ? error : new Error('Unknown error')
+        error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR)
       );
     }
   }
@@ -316,7 +316,7 @@ export class RedLock implements Lock {
       throw new LockExtensionError(
         handle.key,
         'redis_error',
-        error instanceof Error ? error : new Error('Unknown error')
+        error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR)
       );
     }
   }

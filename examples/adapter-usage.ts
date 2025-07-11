@@ -4,12 +4,15 @@
 import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { NodeRedisAdapter, IoredisAdapter } from '../src/adapters/index.js';
+import { getRedisUrl } from '../tests/shared/constants.js';
+
+const UNIQUE_VALUE = 'unique-value';
 
 // Example 1: Using node-redis v4+ client
 async function nodeRedisExample() {
   // User creates their Redis client
   const client = createNodeRedisClient({
-    url: 'redis://localhost:6379',
+    url: getRedisUrl(),
   });
   await client.connect();
 
@@ -17,13 +20,13 @@ async function nodeRedisExample() {
   const adapter = new NodeRedisAdapter(client);
 
   // Unified interface regardless of client
-  const result = await adapter.setNX('my-lock', 'unique-value', 30000);
+  const result = await adapter.setNX('my-lock', UNIQUE_VALUE, 30000);
   console.log('Lock acquired:', result === 'OK');
 
   const value = await adapter.get('my-lock');
   console.log('Lock value:', value);
 
-  const released = await adapter.delIfMatch('my-lock', 'unique-value');
+  const released = await adapter.delIfMatch('my-lock', UNIQUE_VALUE);
   console.log('Lock released:', released);
 
   await client.disconnect();
@@ -41,13 +44,13 @@ async function ioredisExample() {
   const adapter = new IoredisAdapter(client);
 
   // Same unified interface
-  const result = await adapter.setNX('my-lock', 'unique-value', 30000);
+  const result = await adapter.setNX('my-lock', UNIQUE_VALUE, 30000);
   console.log('Lock acquired:', result === 'OK');
 
   const value = await adapter.get('my-lock');
   console.log('Lock value:', value);
 
-  const released = await adapter.delIfMatch('my-lock', 'unique-value');
+  const released = await adapter.delIfMatch('my-lock', UNIQUE_VALUE);
   console.log('Lock released:', released);
 
   client.disconnect();
@@ -56,8 +59,8 @@ async function ioredisExample() {
 // Example 3: Universal factory function
 async function universalExample() {
   // Works with either client type
-  const nodeRedisClient = createNodeRedisClient({ url: 'redis://localhost:6379' });
-  const ioredisClient = new Redis('redis://localhost:6379');
+  const nodeRedisClient = createNodeRedisClient({ url: getRedisUrl() });
+  const ioredisClient = new Redis(getRedisUrl());
 
   const nodeAdapter = NodeRedisAdapter.from(nodeRedisClient);
   const ioAdapter = IoredisAdapter.from(ioredisClient);
@@ -75,7 +78,7 @@ async function universalExample() {
 
 // Example 4: Error handling
 async function errorHandlingExample() {
-  const client = new Redis('redis://localhost:6379');
+  const client = new Redis(getRedisUrl());
   const adapter = new IoredisAdapter(client);
 
   try {

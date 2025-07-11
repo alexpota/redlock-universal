@@ -2,7 +2,7 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import { DEFAULTS } from '../constants.js';
+import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 /**
  * Simple lock implementation for single Redis instance
@@ -258,7 +258,7 @@ export class SimpleLock implements Lock {
     throw new LockAcquisitionError(
       this.key,
       this.retryAttempts + 1,
-      lastError || new Error('Unknown error')
+      lastError || new Error(ERROR_MESSAGES.UNKNOWN_ERROR)
     );
   }
 

@@ -4,10 +4,13 @@
 import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { createLock, NodeRedisAdapter, IoredisAdapter } from '../src/index.js';
+import { getRedisUrl } from '../tests/shared/constants.js';
+
+const STATUS_CHECK_RESOURCE = 'status-check-resource';
 
 // Example 1: Basic lock usage with node-redis
 async function basicLockExample() {
-  const client = createNodeRedisClient({ url: 'redis://localhost:6379' });
+  const client = createNodeRedisClient({ url: getRedisUrl() });
   await client.connect();
 
   const lock = createLock({
@@ -36,7 +39,7 @@ async function basicLockExample() {
 
 // Example 2: Lock with automatic retry
 async function retryLockExample() {
-  const client = new Redis('redis://localhost:6379');
+  const client = new Redis(getRedisUrl());
 
   const lock = createLock({
     adapter: new IoredisAdapter(client),
@@ -63,7 +66,7 @@ async function retryLockExample() {
 
 // Example 3: Lock extension
 async function lockExtensionExample() {
-  const client = createNodeRedisClient({ url: 'redis://localhost:6379' });
+  const client = createNodeRedisClient({ url: getRedisUrl() });
   await client.connect();
 
   const lock = createLock({
@@ -95,23 +98,23 @@ async function lockExtensionExample() {
 
 // Example 4: Lock status checking
 async function lockStatusExample() {
-  const client = new Redis('redis://localhost:6379');
+  const client = new Redis(getRedisUrl());
 
   const lock = createLock({
     adapter: new IoredisAdapter(client),
-    key: 'status-check-resource',
+    key: STATUS_CHECK_RESOURCE,
     ttl: 15000,
   });
 
   // Check if resource is already locked
-  const isLocked = await lock.isLocked('status-check-resource');
+  const isLocked = await lock.isLocked(STATUS_CHECK_RESOURCE);
   console.log('Resource locked:', isLocked);
 
   if (!isLocked) {
     const handle = await lock.acquire();
 
     // Check again - should be true now
-    const nowLocked = await lock.isLocked('status-check-resource');
+    const nowLocked = await lock.isLocked(STATUS_CHECK_RESOURCE);
     console.log('Resource now locked:', nowLocked);
 
     await lock.release(handle);
@@ -122,7 +125,7 @@ async function lockStatusExample() {
 
 // Example 5: Error handling patterns
 async function errorHandlingExample() {
-  const client = createNodeRedisClient({ url: 'redis://localhost:6379' });
+  const client = createNodeRedisClient({ url: getRedisUrl() });
   await client.connect();
 
   const lock = createLock({
@@ -153,7 +156,7 @@ async function errorHandlingExample() {
 
 // Example 6: Multiple locks pattern
 async function multipleLockExample() {
-  const client = createNodeRedisClient({ url: 'redis://localhost:6379' });
+  const client = createNodeRedisClient({ url: getRedisUrl() });
   await client.connect();
 
   const adapter = new NodeRedisAdapter(client);
@@ -191,7 +194,7 @@ async function multipleLockExample() {
 
 // Example 7: Using with async/await patterns
 async function asyncPatternExample() {
-  const client = new Redis('redis://localhost:6379');
+  const client = new Redis(getRedisUrl());
 
   const withLock = async <T>(key: string, fn: () => Promise<T>, ttl = 30000): Promise<T> => {
     const lock = createLock({

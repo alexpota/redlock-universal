@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NodeRedisAdapter } from '../../../src/adapters/NodeRedisAdapter.js';
+import { IoredisAdapter } from '../../../src/adapters/IoredisAdapter.js';
+import { TEST_STRINGS } from '../../shared/constants.js';
 
-describe('NodeRedisAdapter Unit Tests', () => {
+describe('IoredisAdapter Unit Tests', () => {
   let mockClient: any;
-  let adapter: NodeRedisAdapter;
+  let adapter: IoredisAdapter;
 
   beforeEach(() => {
-    // Create mock Redis client
+    // Create mock ioredis client
     mockClient = {
       set: vi.fn(),
       get: vi.fn(),
@@ -14,29 +15,40 @@ describe('NodeRedisAdapter Unit Tests', () => {
       eval: vi.fn(),
       ping: vi.fn(),
       disconnect: vi.fn(),
-      isReady: true,
+      status: 'ready',
     };
 
-    adapter = new NodeRedisAdapter(mockClient);
+    adapter = new IoredisAdapter(mockClient);
   });
 
   describe('setNX', () => {
-    it('should call Redis SET with NX and PX options', async () => {
+    it('should call Redis SET with PX, NX flags', async () => {
       mockClient.set.mockResolvedValue('OK');
 
-      const result = await adapter.setNX('test-key', 'test-value', 5000);
+      const result = await adapter.setNX(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        5000
+      );
 
-      expect(mockClient.set).toHaveBeenCalledWith('test-key', 'test-value', {
-        NX: true,
-        PX: 5000,
-      });
+      expect(mockClient.set).toHaveBeenCalledWith(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        'PX',
+        5000,
+        'NX'
+      );
       expect(result).toBe('OK');
     });
 
     it('should return null when key already exists', async () => {
       mockClient.set.mockResolvedValue(null);
 
-      const result = await adapter.setNX('test-key', 'test-value', 5000);
+      const result = await adapter.setNX(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        5000
+      );
 
       expect(result).toBeNull();
     });
@@ -56,18 +68,18 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('get', () => {
     it('should call Redis GET and return value', async () => {
-      mockClient.get.mockResolvedValue('test-value');
+      mockClient.get.mockResolvedValue(TEST_STRINGS.TEST_VALUE);
 
-      const result = await adapter.get('test-key');
+      const result = await adapter.get(TEST_STRINGS.ADAPTER_TEST_KEY);
 
-      expect(mockClient.get).toHaveBeenCalledWith('test-key');
-      expect(result).toBe('test-value');
+      expect(mockClient.get).toHaveBeenCalledWith(TEST_STRINGS.ADAPTER_TEST_KEY);
+      expect(result).toBe(TEST_STRINGS.TEST_VALUE);
     });
 
     it('should return null when key does not exist', async () => {
       mockClient.get.mockResolvedValue(null);
 
-      const result = await adapter.get('test-key');
+      const result = await adapter.get(TEST_STRINGS.ADAPTER_TEST_KEY);
 
       expect(result).toBeNull();
     });
@@ -77,9 +89,9 @@ describe('NodeRedisAdapter Unit Tests', () => {
     it('should call Redis DEL and return count', async () => {
       mockClient.del.mockResolvedValue(1);
 
-      const result = await adapter.del('test-key');
+      const result = await adapter.del(TEST_STRINGS.ADAPTER_TEST_KEY);
 
-      expect(mockClient.del).toHaveBeenCalledWith('test-key');
+      expect(mockClient.del).toHaveBeenCalledWith(TEST_STRINGS.ADAPTER_TEST_KEY);
       expect(result).toBe(1);
     });
   });
@@ -88,14 +100,16 @@ describe('NodeRedisAdapter Unit Tests', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
       mockClient.eval.mockResolvedValue(1);
 
-      const result = await adapter.delIfMatch('test-key', 'test-value');
+      const result = await adapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
 
       expect(mockClient.eval).toHaveBeenCalledWith(
         expect.stringContaining('if redis.call("GET", KEYS[1]) == ARGV[1]'),
-        {
-          keys: ['test-key'],
-          arguments: ['test-value'],
-        }
+        1,
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
       );
       expect(result).toBe(true);
     });
@@ -103,7 +117,7 @@ describe('NodeRedisAdapter Unit Tests', () => {
     it('should return false when value does not match', async () => {
       mockClient.eval.mockResolvedValue(0);
 
-      const result = await adapter.delIfMatch('test-key', 'wrong-value');
+      const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
 
       expect(result).toBe(false);
     });
@@ -113,14 +127,18 @@ describe('NodeRedisAdapter Unit Tests', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
       mockClient.eval.mockResolvedValue(1);
 
-      const result = await adapter.extendIfMatch('test-key', 'test-value', 10000);
+      const result = await adapter.extendIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        10000
+      );
 
       expect(mockClient.eval).toHaveBeenCalledWith(
         expect.stringContaining('redis.call("PEXPIRE", KEYS[1], ARGV[2])'),
-        {
-          keys: ['test-key'],
-          arguments: ['test-value', '10000'],
-        }
+        1,
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        '10000'
       );
       expect(result).toBe(true);
     });
@@ -128,7 +146,11 @@ describe('NodeRedisAdapter Unit Tests', () => {
     it('should return false when value does not match', async () => {
       mockClient.eval.mockResolvedValue(0);
 
-      const result = await adapter.extendIfMatch('test-key', 'wrong-value', 10000);
+      const result = await adapter.extendIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        'wrong-value',
+        10000
+      );
 
       expect(result).toBe(false);
     });
@@ -152,10 +174,15 @@ describe('NodeRedisAdapter Unit Tests', () => {
   });
 
   describe('isConnected', () => {
-    it('should return client ready status', () => {
+    it('should return true when client status is ready', () => {
       expect(adapter.isConnected()).toBe(true);
+    });
 
-      mockClient.isReady = false;
+    it('should return false when client status is not ready', () => {
+      mockClient.status = 'connecting';
+      expect(adapter.isConnected()).toBe(false);
+
+      mockClient.status = 'disconnected';
       expect(adapter.isConnected()).toBe(false);
     });
   });
@@ -168,7 +195,9 @@ describe('NodeRedisAdapter Unit Tests', () => {
     });
 
     it('should handle disconnect errors gracefully', async () => {
-      mockClient.disconnect.mockRejectedValue(new Error('Disconnect failed'));
+      mockClient.disconnect.mockImplementation(() => {
+        throw new Error('Disconnect failed');
+      });
 
       // Should not throw
       await expect(adapter.disconnect()).resolves.toBeUndefined();
@@ -177,7 +206,7 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('key prefixing', () => {
     it('should add prefix to keys when configured', async () => {
-      const prefixedAdapter = new NodeRedisAdapter(mockClient, { keyPrefix: 'test:' });
+      const prefixedAdapter = new IoredisAdapter(mockClient, { keyPrefix: 'test:' });
       mockClient.get.mockResolvedValue('value');
 
       await prefixedAdapter.get('key');
@@ -188,7 +217,7 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('timeout handling', () => {
     it('should timeout operations after configured time', async () => {
-      const slowAdapter = new NodeRedisAdapter(mockClient, { timeout: 100 });
+      const slowAdapter = new IoredisAdapter(mockClient, { timeout: 100 });
       mockClient.get.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 200)));
 
       await expect(slowAdapter.get('key')).rejects.toThrow('Operation timed out after 100ms');

@@ -3,6 +3,7 @@ import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { createLock } from '../../src/index.js';
 import { NodeRedisAdapter, IoredisAdapter } from '../../src/adapters/index.js';
+import { generateTestKey, getRedisUrl } from '../shared/constants.js';
 
 describe('Developer Experience E2E Tests', () => {
   let nodeRedisClient: any;
@@ -11,11 +12,11 @@ describe('Developer Experience E2E Tests', () => {
   beforeAll(async () => {
     // Setup Redis clients
     nodeRedisClient = createNodeRedisClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: getRedisUrl(),
     });
     await nodeRedisClient.connect();
 
-    ioredisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    ioredisClient = new Redis(getRedisUrl());
   });
 
   afterAll(async () => {
@@ -25,8 +26,7 @@ describe('Developer Experience E2E Tests', () => {
 
   // No need to flushDb since we use unique keys with process.pid
 
-  const getTestKey = () =>
-    `test-e2e-dev-exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
+  const getTestKey = () => generateTestKey('test-e2e-dev-exp');
 
   describe('As a developer using node-redis', () => {
     it('I want to protect a critical section with minimal setup', async () => {

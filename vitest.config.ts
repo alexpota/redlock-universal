@@ -4,11 +4,11 @@ export default defineConfig({
   test: {
     // Environment
     environment: 'node',
-    
+
     // Test files
     include: ['src/**/*.{test,spec}.ts', 'tests/**/*.{test,spec}.ts'],
     exclude: ['node_modules', 'dist'],
-    
+
     // Coverage
     coverage: {
       provider: 'v8',
@@ -28,21 +28,21 @@ export default defineConfig({
         },
       },
     },
-    
+
     // Performance
     testTimeout: 10000, // 10s timeout for integration tests
     hookTimeout: 10000,
-    
-    // Reporter
-    reporter: process.env.CI ? 'verbose' : 'default',
-    
+
+    // Reporters
+    reporters: process.env.CI ? ['verbose'] : ['default'],
+
     // Setup
     setupFiles: [],
-    
+
     // Globals (avoid for better tree-shaking)
     globals: false,
   },
-  
+
   // TypeScript
   esbuild: {
     target: 'es2022',

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient as createNodeRedisClient } from 'redis';
 import { createLock } from '../../../src/index.js';
 import { NodeRedisAdapter } from '../../../src/adapters/index.js';
+import { generateTestKey, getRedisUrl } from '../../shared/constants.js';
 
 describe('SimpleLock Performance Benchmarks', () => {
   let nodeRedisClient: any;
@@ -9,7 +10,7 @@ describe('SimpleLock Performance Benchmarks', () => {
 
   beforeAll(async () => {
     nodeRedisClient = createNodeRedisClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: getRedisUrl(),
     });
     await nodeRedisClient.connect();
     adapter = new NodeRedisAdapter(nodeRedisClient);
@@ -20,8 +21,7 @@ describe('SimpleLock Performance Benchmarks', () => {
   });
 
   // No need to flushDb since we use unique keys with process.pid
-  const getTestKey = () =>
-    `benchmark-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
+  const getTestKey = () => generateTestKey('benchmark');
 
   describe('Lock Acquisition Performance', () => {
     it('should acquire locks within performance targets', async () => {
