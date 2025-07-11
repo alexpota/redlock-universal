@@ -1,0 +1,215 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Unit tests (fast, no dependencies)
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript type checking
+        run: npm run type-check
+      
+      - name: Run linting
+        run: npm run lint && npm run lint:tests
+      
+      - name: Run unit tests
+        run: npm test -- --run tests/utils/ tests/adapters/BaseAdapter.test.ts
+      
+      - name: Build project
+        run: npm run build
+
+  # Integration tests (with Redis)
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      redis-1:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis-2:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis-3:
+        image: redis:7-alpine
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Wait for Redis services
+        run: |
+          timeout 30 bash -c 'until nc -z localhost 6379; do sleep 1; done'
+          timeout 30 bash -c 'until nc -z localhost 6380; do sleep 1; done'
+          timeout 30 bash -c 'until nc -z localhost 6381; do sleep 1; done'
+      
+      - name: Run integration tests
+        run: npm test -- --run
+        env:
+          REDIS_1_HOST: localhost
+          REDIS_1_PORT: 6379
+          REDIS_2_HOST: localhost
+          REDIS_2_PORT: 6380
+          REDIS_3_HOST: localhost
+          REDIS_3_PORT: 6381
+          NODE_ENV: test
+
+  # Docker-based tests (comprehensive)
+  docker-tests:
+    name: Docker Integration Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run Docker-based integration tests
+        run: npm run test:docker
+      
+      - name: Upload coverage reports
+        if: matrix.node-version == 20
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+  # End-to-end tests with all scenarios
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Start Redis cluster
+        run: npm run test:redis:up
+      
+      - name: Wait for Redis cluster
+        run: |
+          timeout 60 bash -c 'until nc -z localhost 6379; do sleep 1; done'
+          timeout 60 bash -c 'until nc -z localhost 6380; do sleep 1; done'
+          timeout 60 bash -c 'until nc -z localhost 6381; do sleep 1; done'
+          timeout 60 bash -c 'until nc -z localhost 6382; do sleep 1; done'
+          timeout 60 bash -c 'until nc -z localhost 6383; do sleep 1; done'
+      
+      - name: Run comprehensive test suite
+        run: npm run test:coverage
+        env:
+          REDIS_1_HOST: localhost
+          REDIS_1_PORT: 6379
+          REDIS_2_HOST: localhost
+          REDIS_2_PORT: 6380
+          REDIS_3_HOST: localhost
+          REDIS_3_PORT: 6381
+          REDIS_4_HOST: localhost
+          REDIS_4_PORT: 6382
+          REDIS_5_HOST: localhost
+          REDIS_5_PORT: 6383
+          NODE_ENV: test
+      
+      - name: Cleanup Redis cluster
+        if: always()
+        run: npm run test:redis:down
+
+  # Security and quality checks
+  security:
+    name: Security & Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run security audit
+        run: npm audit --audit-level=moderate
+      
+      - name: Check for outdated dependencies
+        run: npm outdated || true
+      
+      - name: Validate package-lock.json
+        run: npm ci --dry-run

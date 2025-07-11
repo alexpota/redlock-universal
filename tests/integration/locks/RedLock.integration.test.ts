@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { RedLock } from '../../src/locks/RedLock.js';
-import { LockAcquisitionError } from '../../src/types/errors.js';
-import type { RedisAdapter } from '../../src/types/adapters.js';
-import type { RedLockConfig } from '../../src/types/locks.js';
+import { RedLock } from '../../../src/locks/RedLock.js';
+import { LockAcquisitionError } from '../../../src/types/errors.js';
+import type { RedisAdapter } from '../../../src/types/adapters.js';
+import type { RedLockConfig } from '../../../src/types/locks.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -69,6 +69,19 @@ class MockRedisAdapter implements RedisAdapter {
     return false;
   }
 
+  async extendIfMatch(key: string, value: string, ttl: number): Promise<boolean> {
+    if (this.shouldFailDel) {
+      throw new Error(`Mock extendIfMatch failure on ${this.nodeId}`);
+    }
+    const currentValue = this.storage.get(key);
+    if (currentValue === value) {
+      // Simulate TTL extension by resetting the timeout
+      setTimeout(() => this.storage.delete(key), ttl);
+      return true;
+    }
+    return false;
+  }
+
   async ping(): Promise<string> {
     return 'PONG';
   }
@@ -110,7 +123,8 @@ class MockRedisAdapter implements RedisAdapter {
 describe('RedLock', () => {
   let adapters: MockRedisAdapter[];
   let redlock: RedLock;
-  const testKey = 'test:redlock:key';
+  const getTestKey = () =>
+    `test:redlock:key:${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
 
   beforeEach(() => {
     // Create 5 mock adapters for comprehensive testing
@@ -122,6 +136,7 @@ describe('RedLock', () => {
       new MockRedisAdapter('redis-5'),
     ];
 
+    const testKey = getTestKey();
     const config: RedLockConfig = {
       adapters,
       key: testKey,
@@ -144,7 +159,7 @@ describe('RedLock', () => {
       expect(() => {
         new RedLock({
           adapters: [],
-          key: testKey,
+          key: getTestKey(),
         });
       }).toThrow('At least one Redis adapter is required for RedLock');
     });
@@ -162,7 +177,7 @@ describe('RedLock', () => {
       expect(() => {
         new RedLock({
           adapters: [adapters[0]],
-          key: testKey,
+          key: getTestKey(),
           ttl: -1000,
         });
       }).toThrow('TTL must be a positive integer');
@@ -172,7 +187,7 @@ describe('RedLock', () => {
       expect(() => {
         new RedLock({
           adapters: adapters.slice(0, 3),
-          key: testKey,
+          key: getTestKey(),
           quorum: 5, // More than available adapters
         });
       }).toThrow('Quorum must be between 1 and 3');
@@ -182,7 +197,7 @@ describe('RedLock', () => {
       expect(() => {
         new RedLock({
           adapters: [adapters[0]],
-          key: testKey,
+          key: getTestKey(),
           clockDriftFactor: 1.5,
         });
       }).toThrow('Clock drift factor must be between 0 and 1');
@@ -191,7 +206,7 @@ describe('RedLock', () => {
     it('should use default values for optional parameters', () => {
       const lock = new RedLock({
         adapters: adapters.slice(0, 3),
-        key: testKey,
+        key: getTestKey(),
       });
 
       const config = lock.getConfig();
@@ -207,7 +222,7 @@ describe('RedLock', () => {
       const handle = await redlock.acquire();
 
       expect(handle).toMatchObject({
-        key: testKey,
+        key: redlock.getConfig().key,
         value: expect.any(String),
         acquiredAt: expect.any(Number),
         ttl: 10000,
@@ -220,6 +235,7 @@ describe('RedLock', () => {
       });
 
       // Verify quorum nodes have the lock
+      const testKey = redlock.getConfig().key;
       const lockedNodes = adapters.filter(adapter => adapter.hasKey(testKey));
       expect(lockedNodes.length).toBeGreaterThanOrEqual(3);
 
@@ -230,15 +246,17 @@ describe('RedLock', () => {
     });
 
     it('should retry on initial failure and succeed', async () => {
-      // Make first attempt fail on some nodes
+      // Make first attempt fail on majority of nodes (prevent quorum)
       adapters[0].shouldFailSetNX = true;
       adapters[1].shouldFailSetNX = true;
+      adapters[2].shouldFailSetNX = true;
 
-      // Make retries succeed
+      // Make retries succeed after first attempt fails
       setTimeout(() => {
         adapters[0].shouldFailSetNX = false;
         adapters[1].shouldFailSetNX = false;
-      }, 25);
+        adapters[2].shouldFailSetNX = false;
+      }, 75); // After retry delay of 50ms
 
       const handle = await redlock.acquire();
 
@@ -247,7 +265,10 @@ describe('RedLock', () => {
     });
 
     it('should fail when quorum cannot be achieved', async () => {
-      // Fail majority of nodes
+      // Ensure all adapters are reset first
+      adapters.forEach(adapter => adapter.reset());
+
+      // Fail majority of nodes (3 out of 5, so only 2 succeed < quorum of 3)
       adapters[0].shouldFailSetNX = true;
       adapters[1].shouldFailSetNX = true;
       adapters[2].shouldFailSetNX = true;
@@ -262,15 +283,17 @@ describe('RedLock', () => {
       });
 
       // Use short TTL to trigger clock drift protection
+      // With 5000ms latency + drift, should exceed 5500ms TTL
       const fastRedlock = new RedLock({
         adapters,
-        key: testKey,
-        ttl: 6000, // 6 seconds
-        clockDriftFactor: 0.01,
+        key: getTestKey(),
+        ttl: 5500, // 5.5 seconds - less than latency + drift
+        clockDriftFactor: 0.1, // Higher drift factor for test
+        retryAttempts: 0, // No retries for faster test
       });
 
       await expect(fastRedlock.acquire()).rejects.toThrow(LockAcquisitionError);
-    });
+    }, 15000); // 15 second timeout
 
     it('should clean up partial locks on failure', async () => {
       // Make exactly 2 nodes succeed (less than quorum of 3)
@@ -282,12 +305,14 @@ describe('RedLock', () => {
 
       // Verify partial locks were cleaned up
       await new Promise(resolve => setTimeout(resolve, 10));
+      const testKey = redlock.getConfig().key;
       const lockedNodes = adapters.filter(adapter => adapter.hasKey(testKey));
       expect(lockedNodes.length).toBe(0);
     });
 
     it('should handle lock contention', async () => {
       // Simulate existing locks on some nodes
+      const testKey = redlock.getConfig().key;
       await adapters[0].setNX(testKey, 'other-lock-value', 10000);
       await adapters[1].setNX(testKey, 'other-lock-value', 10000);
 
@@ -296,9 +321,15 @@ describe('RedLock', () => {
       expect(handle).toBeDefined();
 
       // Verify lock acquired on available nodes
-      const lockedNodesWithCorrectValue = adapters.filter(
-        adapter => adapter.hasKey(testKey) && adapter.get(testKey) === handle.value
-      );
+      const lockedNodesWithCorrectValue = [];
+      for (const adapter of adapters) {
+        if (adapter.hasKey(testKey)) {
+          const value = await adapter.get(testKey);
+          if (value === handle.value) {
+            lockedNodesWithCorrectValue.push(adapter);
+          }
+        }
+      }
       expect(lockedNodesWithCorrectValue.length).toBeGreaterThanOrEqual(3);
     });
   });
@@ -311,6 +342,7 @@ describe('RedLock', () => {
       expect(released).toBe(true);
 
       // Verify lock removed from all nodes
+      const testKey = redlock.getConfig().key;
       const lockedNodes = adapters.filter(adapter => adapter.hasKey(testKey));
       expect(lockedNodes.length).toBe(0);
 
@@ -361,7 +393,7 @@ describe('RedLock', () => {
     it('should handle missing lock handle properties', async () => {
       const invalidHandle = {
         id: '',
-        key: testKey,
+        key: redlock.getConfig().key,
         value: '',
         acquiredAt: Date.now(),
         ttl: 10000,
@@ -381,6 +413,7 @@ describe('RedLock', () => {
       expect(extended).toBe(true);
 
       // Verify nodes still have the lock
+      const testKey = redlock.getConfig().key;
       const lockedNodes = adapters.filter(adapter => adapter.hasKey(testKey));
       expect(lockedNodes.length).toBeGreaterThanOrEqual(3);
     });
@@ -417,6 +450,7 @@ describe('RedLock', () => {
   describe('Lock Status Check', () => {
     it('should correctly detect locked state', async () => {
       const handle = await redlock.acquire();
+      const testKey = redlock.getConfig().key;
       const isLocked = await redlock.isLocked(testKey);
 
       expect(isLocked).toBe(true);
@@ -429,6 +463,7 @@ describe('RedLock', () => {
 
     it('should handle partial lock states', async () => {
       // Manually set locks on some nodes
+      const testKey = redlock.getConfig().key;
       await adapters[0].setNX(testKey, 'some-value', 10000);
       await adapters[1].setNX(testKey, 'some-value', 10000);
 
@@ -447,6 +482,7 @@ describe('RedLock', () => {
         adapter.shouldFailGet = true;
       });
 
+      const testKey = redlock.getConfig().key;
       const isLocked = await redlock.isLocked(testKey);
       expect(isLocked).toBe(false); // Default to unlocked on errors
     });
@@ -458,7 +494,7 @@ describe('RedLock', () => {
 
       expect(config).toMatchObject({
         adapters: expect.any(Array),
-        key: testKey,
+        key: redlock.getConfig().key,
         ttl: 10000,
         quorum: 3,
         retryAttempts: 2,
@@ -494,7 +530,7 @@ describe('RedLock', () => {
     it('should work with single node (quorum = 1)', async () => {
       const singleNodeLock = new RedLock({
         adapters: [adapters[0]],
-        key: testKey,
+        key: getTestKey(),
         quorum: 1,
       });
 

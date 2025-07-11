@@ -1,7 +1,7 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
-import { generateLockValue, generateLockId, safeCompare } from '../utils/crypto.js';
+import { generateLockValue, generateLockId } from '../utils/crypto.js';
 import { DEFAULTS } from '../constants.js';
 
 /**
@@ -119,29 +119,8 @@ export class SimpleLock implements Lock {
     }
 
     try {
-      // Check if lock still exists with correct value
-      const currentValue = await this.adapter.get(handle.key);
-
-      if (currentValue === null) {
-        return false; // Lock doesn't exist
-      }
-
-      if (!safeCompare(currentValue, handle.value)) {
-        return false; // Lock exists but with different value
-      }
-
-      // Extend the lock by setting it again with new TTL
-      const result = await this.adapter.setNX(handle.key, handle.value, ttl);
-
-      // If setNX fails, the lock might have expired between get and setNX
-      // Try direct extension using a more complex approach
-      if (result !== 'OK') {
-        // Use a Lua script for atomic extend operation
-        // This is a fallback - in practice, most simple use cases won't need this
-        return false;
-      }
-
-      return true;
+      // Use the atomic extendIfMatch method to safely extend the lock
+      return await this.adapter.extendIfMatch(handle.key, handle.value, ttl);
     } catch (error) {
       throw new LockExtensionError(handle.key, 'redis_error', error as Error);
     }

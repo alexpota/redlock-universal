@@ -101,6 +101,37 @@ export class IoredisAdapter extends BaseAdapter {
   }
 
   /**
+   * Extend TTL of key only if value matches (atomic operation)
+   * Uses Lua script to ensure atomicity
+   */
+  async extendIfMatch(key: string, value: string, ttl: number): Promise<boolean> {
+    this.validateKey(key);
+    this.validateValue(value);
+    this.validateTTL(ttl);
+
+    const prefixedKey = this.prefixKey(key);
+
+    // Lua script for atomic check-value-and-extend-ttl
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+
+    try {
+      const result = await this.withTimeout(
+        this.client.eval(script, 1, prefixedKey, value, ttl.toString()) as Promise<number>
+      );
+
+      return result === 1;
+    } catch (error) {
+      throw new Error(`Failed to extend lock TTL: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * Ping Redis server
    */
   async ping(): Promise<string> {

@@ -53,6 +53,15 @@ export interface RedisAdapter {
   delIfMatch(key: string, value: string): Promise<boolean>;
 
   /**
+   * Extend TTL of a key only if value matches (atomic operation)
+   * @param key - Redis key
+   * @param value - Expected value
+   * @param ttl - New TTL in milliseconds
+   * @returns Promise resolving to true if extended, false otherwise
+   */
+  extendIfMatch(key: string, value: string, ttl: number): Promise<boolean>;
+
+  /**
    * Ping Redis server
    * @returns Promise resolving to 'PONG'
    */

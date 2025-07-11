@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { BaseAdapter } from '../../src/adapters/BaseAdapter.js';
-import type { RedisAdapterOptions } from '../../src/types/adapters.js';
+import { BaseAdapter } from '../../../src/adapters/BaseAdapter.js';
+import type { RedisAdapterOptions } from '../../../src/types/adapters.js';
 
 // Concrete implementation for testing
 class TestAdapter extends BaseAdapter {
@@ -18,6 +18,9 @@ class TestAdapter extends BaseAdapter {
     return 0;
   }
   async delIfMatch(): Promise<boolean> {
+    return false;
+  }
+  async extendIfMatch(): Promise<boolean> {
     return false;
   }
   async ping(): Promise<string> {

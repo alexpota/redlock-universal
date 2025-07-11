@@ -83,6 +83,7 @@ export abstract class BaseAdapter implements RedisAdapter {
   abstract get(key: string): Promise<string | null>;
   abstract del(key: string): Promise<number>;
   abstract delIfMatch(key: string, value: string): Promise<boolean>;
+  abstract extendIfMatch(key: string, value: string, ttl: number): Promise<boolean>;
   abstract ping(): Promise<string>;
   abstract isConnected(): boolean;
   abstract disconnect(): Promise<void>;

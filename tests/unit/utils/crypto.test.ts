@@ -6,7 +6,7 @@ import {
   createLockValueWithMetadata,
   parseLockValue,
   isValidLockValue,
-} from '../../src/utils/crypto.js';
+} from '../../../src/utils/crypto.js';
 
 describe('Crypto Utilities', () => {
   describe('generateLockValue', () => {

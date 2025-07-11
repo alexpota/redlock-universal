@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
-import { NodeRedisAdapter, IoredisAdapter } from '../../src/adapters/index.js';
-import type { RedisAdapter } from '../../src/types/adapters.js';
+import { NodeRedisAdapter, IoredisAdapter } from '../../../src/adapters/index.js';
+import type { RedisAdapter } from '../../../src/types/adapters.js';
 
 describe('Redis Adapter Integration Tests', () => {
   let nodeRedisClient: any;
@@ -10,7 +10,8 @@ describe('Redis Adapter Integration Tests', () => {
   let nodeAdapter: RedisAdapter;
   let ioAdapter: RedisAdapter;
 
-  const testKey = 'test-lock';
+  const getTestKey = () =>
+    `test-lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
   const testValue = 'unique-lock-value';
   const testTTL = 5000;
 
@@ -34,20 +35,18 @@ describe('Redis Adapter Integration Tests', () => {
     ioredisClient?.disconnect();
   });
 
-  beforeEach(async () => {
-    // Clean up any existing test keys
-    await nodeRedisClient.del(testKey);
-    await ioredisClient.del(testKey);
-  });
+  // No need to flushDb since we use unique keys with process.pid
 
   describe.each([
     ['NodeRedisAdapter', () => nodeAdapter],
     ['IoredisAdapter', () => ioAdapter],
   ])('%s', (adapterName, getAdapter) => {
     let adapter: RedisAdapter;
+    let testKey: string;
 
     beforeEach(() => {
       adapter = getAdapter();
+      testKey = getTestKey();
     });
 
     describe('ping', () => {
@@ -209,6 +208,8 @@ describe('Redis Adapter Integration Tests', () => {
 
   describe('cross-adapter compatibility', () => {
     it('should work with locks set by different adapters', async () => {
+      const testKey = getTestKey();
+
       // Set lock with node-redis adapter
       await nodeAdapter.setNX(testKey, testValue, testTTL);
 

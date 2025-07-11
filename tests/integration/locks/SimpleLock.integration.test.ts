@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
-import { SimpleLock, NodeRedisAdapter, IoredisAdapter, createLock } from '../../src/index.js';
-import type { RedisAdapter } from '../../src/types/adapters.js';
+import { SimpleLock, NodeRedisAdapter, IoredisAdapter, createLock } from '../../../src/index.js';
+import type { RedisAdapter } from '../../../src/types/adapters.js';
 
 describe('SimpleLock Integration Tests', () => {
   let nodeRedisClient: any;
@@ -10,8 +10,9 @@ describe('SimpleLock Integration Tests', () => {
   let nodeAdapter: RedisAdapter;
   let ioAdapter: RedisAdapter;
 
-  const testKey = 'test-simple-lock';
   const testTTL = 5000;
+  const getTestKey = () =>
+    `test-simple-lock-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${process.pid}`;
 
   beforeAll(async () => {
     // Setup node-redis client
@@ -33,20 +34,18 @@ describe('SimpleLock Integration Tests', () => {
     ioredisClient?.disconnect();
   });
 
-  beforeEach(async () => {
-    // Clean up any existing test keys
-    await nodeRedisClient.del(testKey);
-    await ioredisClient.del(testKey);
-  });
+  // No need to flushDb since we use unique keys with process.pid
 
   describe.each([
     ['NodeRedisAdapter', () => nodeAdapter],
     ['IoredisAdapter', () => ioAdapter],
   ])('%s', (adapterName, getAdapter) => {
     let adapter: RedisAdapter;
+    let testKey: string;
 
     beforeEach(() => {
       adapter = getAdapter();
+      testKey = getTestKey(); // Generate unique key for each test
     });
 
     describe('SimpleLock basic operations', () => {
@@ -360,6 +359,8 @@ describe('SimpleLock Integration Tests', () => {
 
   describe('cross-adapter compatibility', () => {
     it('should work with locks created by different adapters', async () => {
+      const testKey = getTestKey();
+
       const nodeLock = createLock({
         adapter: nodeAdapter,
         key: testKey,

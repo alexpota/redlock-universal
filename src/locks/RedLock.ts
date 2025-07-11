@@ -301,14 +301,14 @@ export class RedLock implements Lock {
         return false;
       }
 
-      // Extend TTL on all nodes
+      // Extend TTL on all nodes using extendIfMatch for atomicity
       const extendPromises = this.adapters.map(adapter =>
-        adapter.setNX(handle.key, handle.value, ttl)
+        adapter.extendIfMatch(handle.key, handle.value, ttl)
       );
 
       const extendResults = await Promise.allSettled(extendPromises);
       const successfulExtensions = extendResults.filter(
-        result => result.status === 'fulfilled' && result.value === 'OK'
+        result => result.status === 'fulfilled' && result.value === true
       ).length;
 
       return successfulExtensions >= this.config.quorum;

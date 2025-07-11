@@ -1,0 +1,126 @@
+services:
+  # Primary Redis instance
+  redis-1:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-1-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
+  # Secondary Redis instance
+  redis-2:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --port 6379
+    volumes:
+      - redis-2-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
+  # Third Redis instance
+  redis-3:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    command: redis-server --appendonly yes --port 6379
+    volumes:
+      - redis-3-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
+  # Fourth Redis instance (for testing with 4+ nodes)
+  redis-4:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    command: redis-server --appendonly yes --port 6379
+    volumes:
+      - redis-4-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
+  # Fifth Redis instance (for more complex scenarios)
+  redis-5:
+    image: redis:7-alpine
+    ports:
+      - "6383:6379"
+    command: redis-server --appendonly yes --port 6379
+    volumes:
+      - redis-5-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
+  # Test runner service
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      redis-1:
+        condition: service_healthy
+      redis-2:
+        condition: service_healthy
+      redis-3:
+        condition: service_healthy
+      redis-4:
+        condition: service_healthy
+      redis-5:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=test
+      - REDIS_1_HOST=redis-1
+      - REDIS_1_PORT=6379
+      - REDIS_2_HOST=redis-2
+      - REDIS_2_PORT=6379
+      - REDIS_3_HOST=redis-3
+      - REDIS_3_PORT=6379
+      - REDIS_4_HOST=redis-4
+      - REDIS_4_PORT=6379
+      - REDIS_5_HOST=redis-5
+      - REDIS_5_PORT=6379
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    networks:
+      - redlock-test
+
+volumes:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  redis-4-data:
+  redis-5-data:
+
+networks:
+  redlock-test:
+    driver: bridge
