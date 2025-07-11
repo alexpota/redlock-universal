@@ -1,6 +1,6 @@
 # RedLock Universal
 
-> Enterprise-grade distributed Redis locks for Node.js with support for both node-redis and ioredis
+> Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis
 
 ## Status: 🚧 Under Development
 
@@ -14,7 +14,7 @@ RedLock Universal provides a modern, TypeScript-first implementation of distribu
 
 - 🔒 **Distributed Locks**: True Redlock algorithm for multi-instance Redis
 - 🔌 **Client Universal**: Works with both node-redis and ioredis
-- 🏢 **Enterprise Ready**: Monitoring, metrics, observability
+- 🏢 **Production Ready**: Monitoring, metrics, observability
 - 🚀 **Modern DX**: TypeScript-first, excellent error handling
 - ⚡ **High Performance**: Optimized for low latency and high throughput
 - 🛡️ **Battle-Tested**: Based on Redis official Redlock specification

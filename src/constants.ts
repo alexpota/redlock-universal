@@ -63,5 +63,5 @@ export const LUA_SCRIPTS = {
 export const LIBRARY_INFO = {
   NAME: 'redlock-universal',
   VERSION: '0.1.0',
-  DESCRIPTION: 'Enterprise-grade distributed Redis locks for Node.js',
+  DESCRIPTION: 'Production-ready distributed Redis locks for Node.js',
 } as const;

@@ -33,7 +33,7 @@ export default defineConfig({
     js: `
 /**
  * RedLock Universal
- * Enterprise-grade distributed Redis locks for Node.js
+ * Production-ready distributed Redis locks for Node.js
  */`.trim(),
   },
   

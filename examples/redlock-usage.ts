@@ -265,10 +265,10 @@ async function lockContentionExample() {
 }
 
 /**
- * Example 5: Enterprise patterns with error handling
+ * Example 5: Production patterns with error handling
  */
-async function enterprisePatternExample() {
-  console.log('\n=== Enterprise Pattern Example ===');
+async function productionPatternExample() {
+  console.log('\n=== Production Pattern Example ===');
 
   const redis1 = createRedisClient({ socket: { port: 6379 } });
   const redis2 = createRedisClient({ socket: { port: 6380 } });
@@ -283,7 +283,7 @@ async function enterprisePatternExample() {
         new NodeRedisAdapter(redis2),
         new NodeRedisAdapter(redis3),
       ],
-      key: 'enterprise:payment:process',
+      key: 'production:payment:process',
       ttl: 60000, // 1 minute for payment processing
       retryAttempts: 5,
       retryDelay: 500,
@@ -359,7 +359,7 @@ async function runAllExamples() {
     await mixedClientsExample();
     await multipleResourcesExample();
     await lockContentionExample();
-    await enterprisePatternExample();
+    await productionPatternExample();
 
     console.log('\n✅ All examples completed successfully!');
   } catch (error) {
@@ -374,7 +374,7 @@ export {
   mixedClientsExample,
   multipleResourcesExample,
   lockContentionExample,
-  enterprisePatternExample,
+  productionPatternExample,
 };
 
 // Run examples if this file is executed directly

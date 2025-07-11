@@ -1,14 +1,14 @@
 {
   "name": "redlock-universal",
   "version": "0.1.0",
-  "description": "Enterprise-grade distributed Redis locks for Node.js with support for both node-redis and ioredis",
+  "description": "Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis",
   "keywords": [
     "redis",
     "redlock",
     "distributed",
     "lock",
     "mutex",
-    "enterprise",
+    "production",
     "node-redis",
     "ioredis",
     "typescript"

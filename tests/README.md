@@ -1,6 +1,6 @@
 # Test Structure
 
-This directory contains comprehensive tests for the RedLock Universal library, organized following Node.js best practices and enterprise development guidelines.
+This directory contains comprehensive tests for the RedLock Universal library, organized following Node.js best practices and modern development guidelines.
 
 ## Test Organization
 
@@ -89,7 +89,7 @@ npm run test:e2e:watch
 
 ## Test Philosophy
 
-Following enterprise development guidelines:
+Following modern development guidelines:
 
 ### 🎯 **Test Behavior, Not Implementation**
 - Focus on what the code does, not how it does it

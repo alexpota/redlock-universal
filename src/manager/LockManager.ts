@@ -37,7 +37,7 @@ export interface LockStats {
 }
 
 /**
- * Enterprise-grade lock manager for Redis distributed locking
+ * Production-ready lock manager for Redis distributed locking
  * Provides centralized management of locks with monitoring and health checks
  */
 export class LockManager {

@@ -1,5 +1,5 @@
 /**
- * RedLock Universal - Enterprise-grade distributed Redis locks for Node.js
+ * RedLock Universal - Production-ready distributed Redis locks for Node.js
  *
  * @packageDocumentation
  */
