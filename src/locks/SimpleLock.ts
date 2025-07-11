@@ -7,42 +7,193 @@ import { DEFAULTS } from '../constants.js';
 /**
  * Simple lock implementation for single Redis instance
  * Provides reliable locking with retry logic and proper error handling
+ * Memory-optimized for production 24/7 systems
  */
 export class SimpleLock implements Lock {
   private readonly adapter: RedisAdapter;
-  private readonly config: Required<SimpleLockConfig>;
+  private readonly key: string;
+  private readonly ttl: number;
+  private readonly retryAttempts: number;
+  private readonly retryDelay: number;
+  private readonly correlationId?: string;
+  private readonly onAcquire?: (handle: LockHandle) => void;
+  private readonly onRelease?: (handle: LockHandle) => void;
+  private _configCache?: Readonly<SimpleLockConfig>;
+
+  // Connection health monitoring
+  private _lastHealthCheck: number = 0;
+  private _healthCheckInterval: number = 30000; // 30 seconds
+  private _isHealthy: boolean = true;
+
+  // Circuit breaker pattern for Redis failures
+  private _circuitBreakerFailures: number = 0;
+  private _circuitBreakerThreshold: number = 5; // Open circuit after 5 failures
+  private _circuitBreakerTimeout: number = 60000; // 1 minute timeout
+  private _circuitBreakerOpenedAt: number = 0;
+  private _circuitBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
+
+  // Memory optimization: cache frequently used strings (removed unused)
+
+  // Memory optimization: reuse metadata object template
+  private readonly _metadataTemplate: {
+    strategy: 'simple';
+    correlationId?: string;
+  };
 
   constructor(config: SimpleLockConfig) {
-    this.adapter = config.adapter;
-    this.config = {
-      adapter: config.adapter,
-      key: config.key,
-      ttl: config.ttl ?? DEFAULTS.TTL,
-      retryAttempts: config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS,
-      retryDelay: config.retryDelay ?? DEFAULTS.RETRY_DELAY,
-    };
+    // Validate first to avoid storing invalid config
+    this.validateConfig(config);
 
-    this.validateConfig();
+    // Store only what we need, not the entire config
+    this.adapter = config.adapter;
+    this.key = config.key;
+    this.ttl = config.ttl ?? DEFAULTS.TTL;
+    this.retryAttempts = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
+    this.retryDelay = config.retryDelay ?? DEFAULTS.RETRY_DELAY;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.correlationId = (config as any).correlationId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.onAcquire = (config as any).onAcquire;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.onRelease = (config as any).onRelease;
+
+    // Initialize metadata template after correlationId is set
+    this._metadataTemplate = Object.freeze({
+      strategy: 'simple' as const,
+      ...(this.correlationId && { correlationId: this.correlationId }),
+    });
   }
 
   /**
    * Validate configuration parameters
    */
-  private validateConfig(): void {
-    if (!this.config.key || typeof this.config.key !== 'string') {
+  private validateConfig(config: SimpleLockConfig): void {
+    if (!config.key || typeof config.key !== 'string') {
       throw new Error('Lock key must be a non-empty string');
     }
 
-    if (this.config.ttl <= 0 || !Number.isInteger(this.config.ttl)) {
+    const ttl = config.ttl ?? DEFAULTS.TTL;
+    if (ttl <= 0 || !Number.isInteger(ttl)) {
       throw new Error('TTL must be a positive integer');
     }
 
-    if (this.config.retryAttempts < 0 || !Number.isInteger(this.config.retryAttempts)) {
+    const retryAttempts = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
+    if (retryAttempts < 0 || !Number.isInteger(retryAttempts)) {
       throw new Error('Retry attempts must be a non-negative integer');
     }
 
-    if (this.config.retryDelay < 0 || !Number.isInteger(this.config.retryDelay)) {
+    const retryDelay = config.retryDelay ?? DEFAULTS.RETRY_DELAY;
+    if (retryDelay < 0 || !Number.isInteger(retryDelay)) {
       throw new Error('Retry delay must be a non-negative integer');
+    }
+  }
+
+  /**
+   * Circuit breaker pattern implementation
+   */
+  private updateCircuitBreaker(isSuccess: boolean): void {
+    const now = Date.now();
+
+    if (isSuccess) {
+      // Success - reset failure count and close circuit
+      this._circuitBreakerFailures = 0;
+      if (this._circuitBreakerState === 'half-open') {
+        this._circuitBreakerState = 'closed';
+        if (process.env.NODE_ENV !== 'test') {
+          // eslint-disable-next-line no-console
+          console.log('Circuit breaker closed - Redis recovered', {
+            key: this.key,
+            correlationId: this.correlationId,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    } else {
+      // Failure - increment failure count
+      this._circuitBreakerFailures++;
+
+      if (
+        this._circuitBreakerState === 'closed' &&
+        this._circuitBreakerFailures >= this._circuitBreakerThreshold
+      ) {
+        // Open circuit breaker
+        this._circuitBreakerState = 'open';
+        this._circuitBreakerOpenedAt = now;
+        if (process.env.NODE_ENV !== 'test') {
+          // eslint-disable-next-line no-console
+          console.error('Circuit breaker opened - Redis failing', {
+            key: this.key,
+            correlationId: this.correlationId,
+            failures: this._circuitBreakerFailures,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    // Check if circuit should transition to half-open
+    if (
+      this._circuitBreakerState === 'open' &&
+      now - this._circuitBreakerOpenedAt > this._circuitBreakerTimeout
+    ) {
+      this._circuitBreakerState = 'half-open';
+      if (process.env.NODE_ENV !== 'test') {
+        // eslint-disable-next-line no-console
+        console.log('Circuit breaker half-open - testing Redis', {
+          key: this.key,
+          correlationId: this.correlationId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  /**
+   * Check if circuit breaker allows operation
+   */
+  private isCircuitBreakerOpen(): boolean {
+    return this._circuitBreakerState === 'open';
+  }
+
+  /**
+   * Check Redis connection health periodically
+   */
+  private async checkConnectionHealth(): Promise<void> {
+    const now = Date.now();
+    if (now - this._lastHealthCheck < this._healthCheckInterval) {
+      return; // Skip if checked recently
+    }
+
+    this._lastHealthCheck = now;
+
+    try {
+      await this.adapter.ping();
+      this.updateCircuitBreaker(true);
+      if (!this._isHealthy) {
+        this._isHealthy = true;
+        // Log recovery if previously unhealthy
+        if (process.env.NODE_ENV !== 'test') {
+          // eslint-disable-next-line no-console
+          console.log('Redis connection recovered', {
+            key: this.key,
+            correlationId: this.correlationId,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (error) {
+      this._isHealthy = false;
+      this.updateCircuitBreaker(false);
+      // Log health check failure
+      if (process.env.NODE_ENV !== 'test') {
+        // eslint-disable-next-line no-console
+        console.error('Redis health check failed', {
+          key: this.key,
+          correlationId: this.correlationId,
+          error: (error as Error).message,
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
   }
 
@@ -50,46 +201,86 @@ export class SimpleLock implements Lock {
    * Attempt to acquire the lock
    */
   async acquire(): Promise<LockHandle> {
+    // Check circuit breaker first
+    if (this.isCircuitBreakerOpen()) {
+      throw new LockAcquisitionError(
+        this.key,
+        0,
+        new Error('Circuit breaker is open - Redis is failing')
+      );
+    }
+
+    // Check connection health before attempting lock
+    await this.checkConnectionHealth();
+
     const startTime = Date.now();
     let lastError: Error | null = null;
+    const lockValue = generateLockValue();
 
-    for (let attempt = 0; attempt <= this.config.retryAttempts; attempt++) {
+    for (let attempt = 0; attempt <= this.retryAttempts; attempt++) {
       try {
-        const lockValue = generateLockValue();
-        const result = await this.adapter.setNX(this.config.key, lockValue, this.config.ttl);
+        const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
+
+        // Update circuit breaker on success
+        this.updateCircuitBreaker(true);
 
         if (result === 'OK') {
           const acquisitionTime = Date.now() - startTime;
+          const acquiredAt = Date.now();
 
-          return {
+          // Memory optimization: create minimal handle object
+          const handle: LockHandle = {
             id: generateLockId(),
-            key: this.config.key,
+            key: this.key,
             value: lockValue,
-            acquiredAt: Date.now(),
-            ttl: this.config.ttl,
+            acquiredAt,
+            ttl: this.ttl,
             metadata: {
               attempts: attempt + 1,
               acquisitionTime,
-              strategy: 'simple',
+              ...this._metadataTemplate,
             },
           };
+
+          // Metrics hook for monitoring
+          this.onAcquire?.(handle);
+
+          return handle;
         }
 
         // Lock already exists, prepare for retry
-        lastError = new Error(`Lock "${this.config.key}" is already held`);
+        if (!lastError) {
+          lastError = new Error(`Lock "${this.key}" is already held`);
+        }
       } catch (error) {
         lastError = error as Error;
+
+        // Update circuit breaker on failure
+        this.updateCircuitBreaker(false);
+
+        // Log Redis connection issues immediately for production monitoring
+        if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {
+          // eslint-disable-next-line no-console
+          console.error('Redis connection failed for lock', {
+            key: this.key,
+            correlationId: this.correlationId,
+            attempt: attempt + 1,
+            error: error.message,
+            circuitBreaker: this._circuitBreakerState,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
 
       // Wait before retrying (except on last attempt)
-      if (attempt < this.config.retryAttempts) {
-        await this.sleep(this.config.retryDelay);
+      if (attempt < this.retryAttempts) {
+        await this.sleep(this.retryDelay);
       }
     }
 
     throw new LockAcquisitionError(
-      this.config.key,
-      this.config.retryAttempts + 1,
+      this.key,
+      this.retryAttempts + 1,
       lastError || new Error('Unknown error')
     );
   }
@@ -102,6 +293,10 @@ export class SimpleLock implements Lock {
 
     try {
       const released = await this.adapter.delIfMatch(handle.key, handle.value);
+
+      // Metrics hook for monitoring
+      this.onRelease?.(handle);
+
       return released;
     } catch (error) {
       throw new LockReleaseError(handle.key, 'redis_error', error as Error);
@@ -151,10 +346,8 @@ export class SimpleLock implements Lock {
       throw new Error('Invalid lock handle: missing required properties');
     }
 
-    if (handle.key !== this.config.key) {
-      throw new Error(
-        `Lock handle key "${handle.key}" does not match lock key "${this.config.key}"`
-      );
+    if (handle.key !== this.key) {
+      throw new Error(`Lock handle key "${handle.key}" does not match lock key "${this.key}"`);
     }
   }
 
@@ -169,7 +362,16 @@ export class SimpleLock implements Lock {
    * Get lock configuration (for debugging)
    */
   getConfig(): Readonly<SimpleLockConfig> {
-    return { ...this.config };
+    if (!this._configCache) {
+      this._configCache = Object.freeze({
+        adapter: this.adapter,
+        key: this.key,
+        ttl: this.ttl,
+        retryAttempts: this.retryAttempts,
+        retryDelay: this.retryDelay,
+      });
+    }
+    return this._configCache;
   }
 
   /**
@@ -177,5 +379,30 @@ export class SimpleLock implements Lock {
    */
   getAdapter(): RedisAdapter {
     return this.adapter;
+  }
+
+  /**
+   * Get connection health status
+   */
+  getHealth(): {
+    healthy: boolean;
+    lastCheck: number;
+    connected: boolean;
+    circuitBreaker: {
+      state: 'closed' | 'open' | 'half-open';
+      failures: number;
+      openedAt: number;
+    };
+  } {
+    return {
+      healthy: this._isHealthy,
+      lastCheck: this._lastHealthCheck,
+      connected: this.adapter.isConnected(),
+      circuitBreaker: {
+        state: this._circuitBreakerState,
+        failures: this._circuitBreakerFailures,
+        openedAt: this._circuitBreakerOpenedAt,
+      },
+    };
   }
 }

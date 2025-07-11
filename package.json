@@ -48,7 +48,6 @@
     "test": "vitest --run tests/unit",
     "test:all": "vitest",
     "test:watch": "vitest tests/unit",
-    "test:ci": "vitest --run --coverage",
     "test:coverage": "vitest --run --coverage",
     "test:integration": "vitest --run tests/integration tests/e2e",
     "test:docker": "bash scripts/test-docker.sh",
@@ -60,7 +59,7 @@
     "clean": "rm -rf dist",
     "docs": "typedoc src/index.ts",
     "prepare": "husky",
-    "prepublishOnly": "npm run clean && npm run build && npm run test:ci && npm run lint",
+    "prepublishOnly": "npm run clean && npm run build && npm run test:coverage && npm run lint",
     "commit": "cz"
   },
   "config": {

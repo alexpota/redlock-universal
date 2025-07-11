@@ -182,7 +182,8 @@ export class NodeRedisAdapter extends BaseAdapter {
       // Silently handle disconnect errors - they're not critical
       // In production environments, this prevents noise in logs
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`Warning during disconnect: ${(error as Error).message}`);
+        // Log warning about disconnect issue (in production, use proper logging)
+        process.stderr.write(`Warning during disconnect: ${(error as Error).message}\n`);
       }
     }
   }

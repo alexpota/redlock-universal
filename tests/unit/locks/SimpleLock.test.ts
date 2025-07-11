@@ -292,8 +292,10 @@ describe('SimpleLock Unit Tests', () => {
         retryDelay: 100,
       });
 
-      // Ensure it's a copy, not reference
-      config.ttl = 99999;
+      // Ensure it's read-only and cannot be modified
+      expect(() => {
+        (config as any).ttl = 99999;
+      }).toThrow();
       expect(lock.getConfig().ttl).toBe(5000);
     });
 

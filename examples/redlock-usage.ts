@@ -5,13 +5,13 @@
 
 import { createClient as createRedisClient } from 'redis';
 import Redis from 'ioredis';
-import { 
-  createRedlock, 
+import {
+  createRedlock,
   createRedlocks,
-  NodeRedisAdapter, 
+  NodeRedisAdapter,
   IoredisAdapter,
   LockAcquisitionError,
-  type LockHandle 
+  type LockHandle,
 } from '../src/index.js';
 
 /**
@@ -43,7 +43,7 @@ async function basicRedlockExample() {
 
     console.log('Acquiring distributed lock...');
     const handle = await redlock.acquire();
-    
+
     console.log('✅ Lock acquired successfully!');
     console.log('Lock details:', {
       id: handle.id,
@@ -63,7 +63,6 @@ async function basicRedlockExample() {
     console.log('Releasing lock...');
     const released = await redlock.release(handle);
     console.log(`✅ Lock released: ${released}`);
-
   } catch (error) {
     if (error instanceof LockAcquisitionError) {
       console.error('❌ Failed to acquire lock:', error.message);
@@ -116,7 +115,6 @@ async function mixedClientsExample() {
 
     await redlock.release(handle);
     console.log('✅ Lock released successfully');
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {
@@ -182,7 +180,6 @@ async function multipleResourcesExample() {
       const released = await redlocks[i].release(handles[i]);
       console.log(`✅ Released lock for ${handles[i].key}: ${released}`);
     }
-
   } catch (error) {
     console.error('❌ Error:', error);
   } finally {
@@ -260,7 +257,6 @@ async function lockContentionExample() {
 
     await redlock2.release(handle2);
     console.log('✅ Second client released lock');
-
   } catch (error) {
     console.error('❌ Unexpected error:', error);
   } finally {
@@ -307,7 +303,6 @@ async function enterprisePatternExample() {
       await simulatePaymentProcessing(handle, redlock);
 
       console.log('✅ Payment processed successfully');
-
     } catch (error) {
       if (error instanceof LockAcquisitionError) {
         console.error('❌ Failed to acquire payment lock:', error.message);
@@ -316,7 +311,6 @@ async function enterprisePatternExample() {
         console.error('❌ Payment processing error:', error);
       }
       throw error;
-
     } finally {
       // Always attempt to release the lock
       if (handle) {
@@ -329,7 +323,6 @@ async function enterprisePatternExample() {
         }
       }
     }
-
   } finally {
     await Promise.all([redis1.disconnect(), redis2.disconnect(), redis3.disconnect()]);
   }
@@ -341,10 +334,10 @@ async function enterprisePatternExample() {
 async function simulatePaymentProcessing(handle: LockHandle, redlock: any) {
   for (let step = 1; step <= 3; step++) {
     console.log(`Payment step ${step}/3...`);
-    
+
     // Simulate work
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Extend lock if we need more time
     if (step === 2) {
       console.log('Extending lock for additional processing time...');
@@ -367,7 +360,7 @@ async function runAllExamples() {
     await multipleResourcesExample();
     await lockContentionExample();
     await enterprisePatternExample();
-    
+
     console.log('\n✅ All examples completed successfully!');
   } catch (error) {
     console.error('\n❌ Example execution failed:', error);

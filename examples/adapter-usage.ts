@@ -9,7 +9,7 @@ import { NodeRedisAdapter, IoredisAdapter } from '../src/adapters/index.js';
 async function nodeRedisExample() {
   // User creates their Redis client
   const client = createNodeRedisClient({
-    url: 'redis://localhost:6379'
+    url: 'redis://localhost:6379',
   });
   await client.connect();
 
@@ -29,12 +29,12 @@ async function nodeRedisExample() {
   await client.disconnect();
 }
 
-// Example 2: Using ioredis v5+ client  
+// Example 2: Using ioredis v5+ client
 async function ioredisExample() {
   // User creates their Redis client
   const client = new Redis({
     host: 'localhost',
-    port: 6379
+    port: 6379,
   });
 
   // Our adapter wraps their client
@@ -64,7 +64,7 @@ async function universalExample() {
 
   // Both adapters have identical interface
   const operations = [nodeAdapter, ioAdapter];
-  
+
   for (const adapter of operations) {
     const lockAcquired = await adapter.setNX('test-lock', 'value', 5000);
     if (lockAcquired === 'OK') {
@@ -94,9 +94,4 @@ async function errorHandlingExample() {
   }
 }
 
-export {
-  nodeRedisExample,
-  ioredisExample,  
-  universalExample,
-  errorHandlingExample
-};
+export { nodeRedisExample, ioredisExample, universalExample, errorHandlingExample };

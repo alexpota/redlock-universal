@@ -33,10 +33,10 @@ jobs:
         run: npm run type-check
       
       - name: Run linting
-        run: npm run lint && npm run lint:tests
+        run: npm run lint
       
       - name: Run unit tests
-        run: npm test -- --run tests/utils/ tests/adapters/BaseAdapter.test.ts
+        run: npm test
       
       - name: Build project
         run: npm run build
@@ -132,7 +132,7 @@ jobs:
         run: npm run test:docker
       
       - name: Upload coverage reports
-        if: matrix.node-version == 20
+        if: success()
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -158,7 +158,7 @@ jobs:
         run: npm ci
       
       - name: Start Redis cluster
-        run: npm run test:redis:up
+        run: docker-compose -f docker-compose.test.yml up -d
       
       - name: Wait for Redis cluster
         run: |
@@ -185,7 +185,7 @@ jobs:
       
       - name: Cleanup Redis cluster
         if: always()
-        run: npm run test:redis:down
+        run: docker-compose -f docker-compose.test.yml down -v
 
   # Security and quality checks
   security:

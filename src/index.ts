@@ -22,6 +22,10 @@ export type { Lock, LockHandle, SimpleLockConfig, RedLockConfig } from './locks/
 export { BaseAdapter, NodeRedisAdapter, IoredisAdapter } from './adapters/index.js';
 export type { RedisAdapter, RedisAdapterOptions } from './adapters/index.js';
 
+// Lock manager
+export { LockManager } from './manager/index.js';
+export type { LockManagerConfig, LockStats } from './manager/index.js';
+
 // Utilities
 export {
   generateLockValue,

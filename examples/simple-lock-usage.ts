@@ -1,7 +1,7 @@
 // Examples showing how SimpleLock should work
 // This demonstrates the ideal API we want to achieve
 
-import { createClient as createNodeRedisClient, type RedisClientType } from 'redis';
+import { createClient as createNodeRedisClient } from 'redis';
 import Redis from 'ioredis';
 import { createLock, NodeRedisAdapter, IoredisAdapter } from '../src/index.js';
 
