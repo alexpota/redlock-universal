@@ -1,6 +1,7 @@
 import type { RedisAdapter } from './types/adapters.js';
 import type { Lock, SimpleLockConfig, RedLockConfig } from './types/locks.js';
 import { SimpleLock } from './locks/SimpleLock.js';
+import { LeanSimpleLock } from './locks/LeanSimpleLock.js';
 import { RedLock } from './locks/RedLock.js';
 import { ConfigurationError } from './types/errors.js';
 
@@ -18,6 +19,8 @@ export interface CreateLockConfig {
   readonly retryAttempts?: number;
   /** Delay between retries in milliseconds (default: 100) */
   readonly retryDelay?: number;
+  /** Performance mode: 'standard' (default) | 'lean' | 'enterprise' */
+  readonly performance?: 'standard' | 'lean' | 'enterprise';
 }
 
 /**
@@ -57,7 +60,6 @@ export function createLock(config: CreateLockConfig): Lock {
     throw new ConfigurationError('Lock key is required');
   }
 
-  // Convert to SimpleLockConfig format
   const simpleLockConfig: SimpleLockConfig = {
     adapter: config.adapter,
     key: config.key,
@@ -66,7 +68,16 @@ export function createLock(config: CreateLockConfig): Lock {
     ...(config.retryDelay !== undefined && { retryDelay: config.retryDelay }),
   };
 
-  return new SimpleLock(simpleLockConfig);
+  const performance = config.performance ?? 'standard';
+
+  switch (performance) {
+    case 'lean':
+      return new LeanSimpleLock(simpleLockConfig);
+    case 'enterprise':
+    case 'standard':
+    default:
+      return new SimpleLock(simpleLockConfig);
+  }
 }
 
 /**

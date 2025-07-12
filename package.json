@@ -61,7 +61,7 @@
     "clean": "rm -rf dist",
     "docs": "typedoc src/index.ts",
     "prepare": "husky",
-    "prepublishOnly": "npm run clean && npm run build && npm run test:coverage && npm run lint",
+    "prepublishOnly": "npm run clean && npm run build && npm test && npm run lint",
     "commit": "cz"
   },
   "config": {

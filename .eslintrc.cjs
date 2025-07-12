@@ -90,5 +90,12 @@ module.exports = {
         '@typescript-eslint/prefer-string-starts-ends-with': 'off',
       },
     },
+    // Logger file - allow console usage
+    {
+      files: ['src/monitoring/Logger.ts'],
+      rules: {
+        'no-console': 'off',
+      },
+    },
   ],
 };
