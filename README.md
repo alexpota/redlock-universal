@@ -2,10 +2,12 @@
 
 > Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis
 
-[![npm version](https://badge.fury.io/js/redlock-universal.svg)](https://badge.fury.io/js/redlock-universal)
-[![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
+[![Node.js](https://img.shields.io/node/v/redlock-universal.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Test Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](./coverage)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 
 ## Overview
 

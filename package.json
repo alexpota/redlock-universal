@@ -8,10 +8,15 @@
     "distributed",
     "lock",
     "mutex",
-    "production",
+    "semaphore",
+    "concurrency",
+    "microservices",
     "node-redis",
     "ioredis",
-    "typescript"
+    "typescript",
+    "production",
+    "clustering",
+    "synchronization"
   ],
   "author": "Alex Potapenko <alex.potapenko.dev@gmail.com>",
   "license": "MIT",
@@ -37,7 +42,9 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md"
   ],
   "engines": {
     "node": ">=18.0.0"
