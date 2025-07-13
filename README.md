@@ -117,12 +117,13 @@ try {
 Creates a simple lock for single Redis instance.
 
 ```typescript
-interface SimpleLockConfig {
+interface CreateLockConfig {
   adapter: RedisAdapter;
   key: string;
-  ttl?: number;              // Default: 30000ms
-  retryAttempts?: number;    // Default: 3
-  retryDelay?: number;       // Default: 100ms
+  ttl?: number;                    // Default: 30000ms
+  retryAttempts?: number;          // Default: 3
+  retryDelay?: number;             // Default: 100ms
+  performance?: 'standard' | 'lean' | 'enterprise';  // Default: 'standard'
 }
 ```
 
@@ -141,6 +142,31 @@ const extended = await lock.extend(handle, newTTL);
 // Check if locked
 const isLocked = await lock.isLocked(key);
 ```
+
+#### Performance Modes
+
+Choose the optimal performance mode for your use case:
+
+```typescript
+// Standard mode (default) - Full features with monitoring
+const lock = createLock({
+  adapter: new NodeRedisAdapter(client),
+  key: 'resource',
+  performance: 'standard'  // Full monitoring, health checks
+});
+
+// Lean mode - Memory optimized for high-throughput scenarios
+const leanLock = createLock({
+  adapter: new NodeRedisAdapter(client),
+  key: 'resource',
+  performance: 'lean'  // Saves ~150KB memory, 3% faster
+});
+```
+
+**Performance Mode Comparison:**
+- **Standard**: Full monitoring, health checks, comprehensive error details
+- **Lean**: Memory-optimized, pre-allocated errors, minimal overhead
+- **Enterprise**: Standard + circuit breakers + advanced observability (future)
 
 ### Distributed Lock (RedLock)
 
@@ -182,6 +208,38 @@ import Redis from 'ioredis';
 
 const client = new Redis('redis://localhost:6379');
 const adapter = new IoredisAdapter(client);
+```
+
+### Factory Functions
+
+Convenient functions for creating multiple locks or specialized configurations:
+
+```typescript
+import { createLocks, createPrefixedLock, createRedlocks } from 'redlock-universal';
+
+// Create multiple locks with shared configuration
+const locks = createLocks(adapter, ['user:123', 'account:456'], {
+  ttl: 15000,
+  retryAttempts: 5,
+  performance: 'lean'
+});
+
+// Create lock with automatic key prefixing
+const userLock = createPrefixedLock(adapter, 'locks:user:', '123', {
+  ttl: 10000
+});
+// Results in key: "locks:user:123"
+
+// Create multiple distributed locks
+const redlocks = createRedlocks(
+  [adapter1, adapter2, adapter3],
+  ['resource1', 'resource2'],
+  {
+    ttl: 15000,
+    quorum: 2,
+    retryAttempts: 5
+  }
+);
 ```
 
 ## Advanced Usage
