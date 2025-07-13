@@ -100,7 +100,7 @@ jobs:
           timeout 30 bash -c 'until nc -z localhost 6381; do sleep 1; done'
       
       - name: Run integration tests
-        run: npm test -- --run
+        run: npm run test:integration
         env:
           REDIS_1_HOST: localhost
           REDIS_1_PORT: 6379
