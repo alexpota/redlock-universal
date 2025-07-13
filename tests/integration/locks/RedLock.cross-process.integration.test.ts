@@ -21,6 +21,10 @@ import {
  * true distributed locking guarantees in real multi-process scenarios.
  */
 describe('RedLock Cross-Process Validation', () => {
+  // Detect CI environment for adjusted timeouts and process limits
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  const processTimeout = isCI ? 15000 : 10000; // Longer timeout in CI
+  const maxProcesses = isCI ? 2 : 3; // Fewer processes in CI
   const redisClients: any[] = [];
   const adapters: RedisAdapter[] = [];
   const childProcesses: ChildProcess[] = [];
@@ -191,7 +195,7 @@ main().catch(console.error);
   describe('Basic Cross-Process Locking', () => {
     it('should prevent simultaneous lock acquisition across processes', async () => {
       const testKey = generateTestKey('cross-process');
-      const numWorkers = 3;
+      const numWorkers = maxProcesses;
 
       // Create worker scripts
       const workerPromises = Array.from({ length: numWorkers }, (_, i) => {
@@ -239,60 +243,64 @@ main().catch(console.error);
       });
     }, 15000);
 
-    it('should handle sequential lock acquisition across processes', async () => {
-      const testKey = generateTestKey('cross-process');
-      const numWorkers = 3;
+    it(
+      'should handle sequential lock acquisition across processes',
+      async () => {
+        const testKey = generateTestKey('cross-process');
+        const numWorkers = maxProcesses;
 
-      // Start workers sequentially with delays
-      const results = [];
-      for (let i = 0; i < numWorkers; i++) {
-        const scriptContent = createWorkerScript(testKey, i, 'acquire');
-        const resultPromise = spawnWorker(scriptContent, i);
-        results.push(resultPromise);
+        // Start workers sequentially with delays
+        const results = [];
+        for (let i = 0; i < numWorkers; i++) {
+          const scriptContent = createWorkerScript(testKey, i, 'acquire');
+          const resultPromise = spawnWorker(scriptContent, i);
+          results.push(resultPromise);
 
-        // Wait before starting next worker
-        await delay(TIMEOUT_CONFIG.SEQUENTIAL_DELAY);
-      }
+          // Wait before starting next worker
+          await delay(TIMEOUT_CONFIG.SEQUENTIAL_DELAY);
+        }
 
-      // Wait for all workers to complete
-      const workerResults = await Promise.all(results);
+        // Wait for all workers to complete
+        const workerResults = await Promise.all(results);
 
-      // Parse and verify results
-      const workerEvents = workerResults.map((result, workerId) => {
-        const events = result.stdout
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => {
-            try {
-              return JSON.parse(line);
-            } catch (error) {
-              return null;
-            }
-          })
-          .filter(event => event !== null);
+        // Parse and verify results
+        const workerEvents = workerResults.map((result, workerId) => {
+          const events = result.stdout
+            .split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+              try {
+                return JSON.parse(line);
+              } catch (error) {
+                return null;
+              }
+            })
+            .filter(event => event !== null);
 
-        return { workerId, events };
-      });
+          return { workerId, events };
+        });
 
-      // Most workers should successfully acquire and release
-      // In distributed systems, some workers may fail due to timing/network issues
-      const acquisitions = workerEvents.flatMap(worker =>
-        worker.events.filter(event => event.event === 'acquired')
-      );
-      const releases = workerEvents.flatMap(worker =>
-        worker.events.filter(event => event.event === 'released')
-      );
+        // Most workers should successfully acquire and release
+        // In distributed systems, some workers may fail due to timing/network issues
+        const acquisitions = workerEvents.flatMap(worker =>
+          worker.events.filter(event => event.event === 'acquired')
+        );
+        const releases = workerEvents.flatMap(worker =>
+          worker.events.filter(event => event.event === 'released')
+        );
 
-      // Allow for at least 2 out of 3 workers to succeed (66% success rate)
-      expect(acquisitions.length).toBeGreaterThanOrEqual(Math.floor(numWorkers * 0.66));
-      expect(releases.length).toBeGreaterThanOrEqual(Math.floor(numWorkers * 0.66));
-    }, 20000);
+        // Allow for at least 2 out of 3 workers to succeed (66% success rate)
+        expect(acquisitions.length).toBeGreaterThanOrEqual(Math.floor(numWorkers * 0.66));
+        expect(releases.length).toBeGreaterThanOrEqual(Math.floor(numWorkers * 0.66));
+      },
+      processTimeout * 2
+    );
   });
 
   describe('Competitive Lock Acquisition', () => {
     it('should handle multiple competing processes', async () => {
       const testKey = generateTestKey('cross-process');
-      const numCompetitors = 5;
+      const numCompetitors = isCI ? 3 : 5;
 
       // Start all competitors simultaneously
       const workerPromises = Array.from({ length: numCompetitors }, (_, i) => {

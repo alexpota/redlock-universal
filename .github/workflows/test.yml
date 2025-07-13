@@ -158,7 +158,7 @@ jobs:
         run: npm ci
       
       - name: Start Redis cluster
-        run: docker-compose -f docker-compose.test.yml up -d
+        run: docker compose -f docker-compose.test.yml up -d
       
       - name: Wait for Redis cluster
         run: |
@@ -185,7 +185,7 @@ jobs:
       
       - name: Cleanup Redis cluster
         if: always()
-        run: docker-compose -f docker-compose.test.yml down -v
+        run: docker compose -f docker-compose.test.yml down -v
 
   # Security and quality checks
   security:
