@@ -107,7 +107,7 @@
     "@vitest/coverage-v8": "^3.2.4",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
-    "eslint": "^8.50.0",
+    "eslint": "^9.31.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-deprecation": "^3.0.0",
     "eslint-plugin-prettier": "^5.5.1",
