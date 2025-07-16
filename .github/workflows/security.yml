@@ -41,10 +41,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Check if repo is public
+      id: check-public
+      run: |
+        IS_PUBLIC=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${{ github.repository }} | jq -r .private)
+        echo "is_private=$IS_PUBLIC" >> $GITHUB_OUTPUT
+
     - name: Dependency Review
+      if: steps.check-public.outputs.is_private == 'false'
       uses: actions/dependency-review-action@v4
       with:
         fail-on-severity: moderate
+
+    - name: Skip Dependency Review for Private Repos
+      if: steps.check-public.outputs.is_private == 'true'
+      run: echo "Dependency review skipped for private repositories"
 
   codeql-analysis:
     name: CodeQL Analysis
