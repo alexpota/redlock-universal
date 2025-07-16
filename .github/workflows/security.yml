@@ -32,44 +32,36 @@ jobs:
     - name: Check for known vulnerabilities
       run: npx audit-ci --moderate
 
-  dependency-review:
-    name: Dependency Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+  # Dependency review is commented out for private repositories
+  # Uncomment when repository is made public or GitHub Advanced Security is enabled
+  # dependency-review:
+  #   name: Dependency Review
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request'
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #
+  #   - name: Dependency Review
+  #     uses: actions/dependency-review-action@v4
+  #     with:
+  #       fail-on-severity: moderate
 
-    - name: Check if repo is public
-      id: check-public
-      run: |
-        IS_PUBLIC=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          https://api.github.com/repos/${{ github.repository }} | jq -r .private)
-        echo "is_private=$IS_PUBLIC" >> $GITHUB_OUTPUT
-
-    - name: Dependency Review
-      if: steps.check-public.outputs.is_private == 'false'
-      uses: actions/dependency-review-action@v4
-      with:
-        fail-on-severity: moderate
-
-    - name: Skip Dependency Review for Private Repos
-      if: steps.check-public.outputs.is_private == 'true'
-      run: echo "Dependency review skipped for private repositories"
-
-  codeql-analysis:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: javascript
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+  # CodeQL is commented out for private repositories
+  # Uncomment when repository is made public or GitHub Advanced Security is enabled
+  # codeql-analysis:
+  #   name: CodeQL Analysis
+  #   runs-on: ubuntu-latest
+  #   
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #
+  #   - name: Initialize CodeQL
+  #     uses: github/codeql-action/init@v3
+  #     with:
+  #       languages: javascript
+  #
+  #   - name: Perform CodeQL Analysis
+  #     uses: github/codeql-action/analyze@v3
