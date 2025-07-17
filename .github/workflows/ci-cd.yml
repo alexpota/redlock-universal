@@ -109,9 +109,6 @@ jobs:
         echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
         echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
 
-    - name: Test NPM Auth
-      run: npm whoami
-
     - name: Release
       run: npm run release
       env:
