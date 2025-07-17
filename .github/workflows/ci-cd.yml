@@ -105,6 +105,13 @@ jobs:
     - name: Build
       run: npm run build
 
+    - name: Test NPM Auth
+      run: |
+        echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        npm whoami
+      env:
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
     - name: Release
       run: npm run release
       env:
