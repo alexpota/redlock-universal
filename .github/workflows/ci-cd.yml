@@ -96,7 +96,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        registry-url: 'https://registry.npmjs.org'
         cache: 'npm'
 
     - name: Install dependencies
@@ -105,18 +104,18 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Test NPM Auth
+    - name: Configure NPM Authentication
       run: |
-        echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        npm whoami
-      env:
-        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+        echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+
+    - name: Test NPM Auth
+      run: npm whoami
 
     - name: Release
       run: npm run release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   docs:
     name: Deploy Documentation
