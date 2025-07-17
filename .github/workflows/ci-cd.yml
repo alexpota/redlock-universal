@@ -11,7 +11,7 @@ on:
     types: [ published ]
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   test:
@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 21.x]
+        node-version: [20.x, 21.x, 22.x]
 
     steps:
     - name: Checkout code
@@ -68,11 +68,11 @@ jobs:
 
     - name: Test - Coverage
       run: npm run test:coverage
-      if: matrix.node-version == '18.x'
+      if: matrix.node-version == '20.x'
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
-      if: matrix.node-version == '18.x'
+      if: matrix.node-version == '20.x'
       with:
         fail_ci_if_error: false
 
