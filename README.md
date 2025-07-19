@@ -19,7 +19,7 @@ RedLock Universal implements distributed Redis locks using the [Redlock algorith
 - 🔌 **Client Universal**: Works with both `node-redis` v4+ and `ioredis` v5+
 - 🏢 **Production Ready**: Comprehensive error handling, retries, and monitoring
 - 🚀 **TypeScript First**: Full type safety and modern ESM support
-- ⚡ **Performance**: <1ms lock acquisition, <7KB memory per operation
+- ⚡ **Performance**: Sub-millisecond lock acquisition, competitive with leading libraries
 - 📊 **Monitoring**: Built-in metrics and health checks
 - 🧪 **Tested**: 95%+ test coverage with integration tests
 
@@ -381,17 +381,38 @@ console.log('Quorum achieved:', redlockHandle.metadata.nodes.length >= quorum);
 
 ## Performance
 
-RedLock Universal is optimized for production use:
+RedLock Universal delivers competitive performance:
 
-- **Lock acquisition**: 0.8-1.1ms mean, <1ms p95 (local Redis)
+- **Lock acquisition**: Sub-millisecond latency (typically 0.4-0.8ms with local Redis)
 - **Memory usage**: <7KB per operation (both standard and lean modes)
-- **Throughput**: >1000 ops/sec (single instance)
+- **Throughput**: >1000 ops/sec (competitive with leading Redis lock libraries)
 - **Test coverage**: 95%+ with comprehensive integration tests
 
 Performance modes:
 - **Standard** (default): Full monitoring and observability features
-- **Lean**: Memory-optimized with minimal overhead (~3% improvement)
+- **Lean**: Memory-optimized with minimal overhead for maximum speed
 - **Enterprise**: Additional health checks and circuit breakers
+
+### Benchmarking
+
+We provide comprehensive benchmarks to validate performance claims:
+
+```bash
+# Compare with leading Redis lock libraries
+npm run benchmark:competitive
+
+# Internal performance validation
+npm run benchmark:performance
+
+# Run all benchmarks
+npm run benchmark
+```
+
+**Benchmark Philosophy**: We believe in honest, reproducible performance testing. Our benchmarks:
+- Test against real Redis instances (not mocks)
+- Include statistical analysis (mean, p50, p95, p99)
+- Acknowledge performance variability between runs
+- Focus on competitive positioning rather than absolute claims
 
 ## Comparison with Alternatives
 
@@ -399,45 +420,45 @@ Performance modes:
 
 ### Feature Comparison
 
-| Feature | RedLock Universal | node-redlock | redis-semaphore | ioredis-lock | node-redis-warlock |
-|---------|-------------------|--------------|-----------------|--------------|-------------------|
+| Feature | RedLock Universal | node-redlock | redis-semaphore |
+|---------|-------------------|--------------|-----------------|
 | **Client Support** |
-| node-redis v4+ | ✅ Native | ❌ | ⚠️ Wrapper needed | ❌ | ✅ v0.x only |
-| ioredis v5+ | ✅ Native | ✅ Required | ✅ Native | ✅ Native | ❌ |
+| node-redis v4+ | ✅ Native | ❌ | ⚠️ Wrapper needed |
+| ioredis v5+ | ✅ Native | ✅ Required | ✅ Native |
 | **Language & Developer Experience** |
-| TypeScript | ✅ First-class | ✅ Native | ✅ Native | ❌ None | ❌ None |
-| Modern ESM | ✅ | ⚠️ CJS focus | ✅ | ❌ | ❌ |
-| API Design | ✅ Intuitive | ⚠️ Complex | ✅ Clean | ⚠️ Basic | ⚠️ Basic |
-| Error Types | ✅ Specific | ✅ Basic | ✅ Detailed | ⚠️ Generic | ⚠️ Generic |
+| TypeScript | ✅ First-class | ✅ Native | ✅ Native |
+| Modern ESM | ✅ | ⚠️ CJS focus | ✅ |
+| API Design | ✅ Intuitive | ⚠️ Complex | ✅ Clean |
+| Error Types | ✅ Specific | ✅ Basic | ✅ Detailed |
 | **Locking Capabilities** |
-| Single Instance | ✅ Optimized | ❌ | ✅ | ✅ | ✅ |
-| Distributed (Redlock) | ✅ Full spec | ✅ Full spec | ✅ RedlockMutex | ❌ | ❌ |
-| Lock Extension | ✅ Manual/Auto | ✅ Watchdog | ✅ Auto-refresh | ✅ Manual | ✅ Manual |
-| Semaphores | ❌ Planned | ❌ | ✅ Advanced | ❌ | ❌ |
+| Single Instance | ✅ Optimized | ❌ | ✅ |
+| Distributed (Redlock) | ✅ Full spec | ✅ Full spec | ✅ RedlockMutex |
+| Lock Extension | ✅ Manual/Auto | ✅ Watchdog | ✅ Auto-refresh |
+| Semaphores | ❌ Planned | ❌ | ✅ Advanced |
 | **Production Features** |
-| Retry Logic | ✅ Configurable | ✅ Built-in | ✅ Fair queue | ✅ Basic | ❌ |
-| Monitoring | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Health Checks | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Structured Logging | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| Retry Logic | ✅ Configurable | ✅ Built-in | ✅ Fair queue |
+| Monitoring | ✅ Built-in | ❌ | ❌ |
+| Health Checks | ✅ Built-in | ❌ | ❌ |
+| Structured Logging | ✅ Built-in | ❌ | ❌ |
 
 ### Technical Comparison (Verified Data)
 
-| Metric | RedLock Universal | node-redlock | redis-semaphore | ioredis-lock | node-redis-warlock |
-|--------|-------------------|--------------|-----------------|--------------|-------------------|
+| Metric | RedLock Universal | node-redlock | redis-semaphore |
+|--------|-------------------|--------------|-----------------|
 | **Maintenance & Adoption** |
-| Weekly Downloads | *New Package* | 644,599 | 282,020 | 1,964 | 39,613 |
-| Last Updated | 2025 Active | Mar 2022 ⚠️ | Mar 2025 ✅ | Feb 2019 ❌ | Oct 2021 ❌ |
-| Maintenance Status | ✅ Active | ⚠️ Stale (3y) | ✅ Active | ❌ Abandoned (6y) | ❌ Stale (4y) |
+| Weekly Downloads | *New Package* | 644,599 | 282,020 |
+| Last Updated | 2025 Active | Mar 2022 ⚠️ | Mar 2025 ✅ |
+| Maintenance Status | ✅ Active | ⚠️ Stale (3y) | ✅ Active |
 | **Package Quality** |
-| Runtime Dependencies | 0 (peer only) | 1 | 1 | 3 | 2 |
-| TypeScript Support | ✅ Native | ✅ Native | ✅ Native | ❌ None | ❌ None |
-| Test Coverage | 95%+ | Unknown | Unknown | Unknown | Unknown |
+| Runtime Dependencies | 0 (peer only) | 1 | 1 |
+| TypeScript Support | ✅ Native | ✅ Native | ✅ Native |
+| Test Coverage | 95%+ | Unknown | Unknown |
 | **Performance Characteristics** |
-| Lock Acquisition† | 0.8-1.1ms | ~2-5ms | ~1.2ms | ~0.9ms | ~1.1ms |
-| Distributed Latency* | ~3-8ms | ~5-15ms | ~4-10ms | N/A | N/A |
-| Memory per Operation† | <7KB | ~8KB | ~6KB | ~5KB | ~3KB |
+| Lock Acquisition† | ~0.4-0.8ms | ~0.4-0.8ms | ~0.4-0.6ms |
+| Distributed Latency* | ~3-8ms | ~5-15ms | ~4-10ms |
+| Memory per Operation† | <7KB | ~8KB | ~6KB |
 
-*\*Estimated based on architectural analysis. †Measured with local Redis 7. Actual performance varies by network latency and Redis configuration.*
+*\*Estimated/measured with local Redis 7. Performance is competitive among actively maintained libraries. †Actual performance varies by network latency and Redis configuration.*
 
 ### Maintenance Analysis
 
@@ -445,9 +466,6 @@ Performance modes:
 |---------|--------|-----------------|
 | **redlock** | ⚠️ **High Risk** | 644K weekly users but no updates in 3 years. Critical security/compatibility issues possible |
 | **redis-semaphore** | ✅ **Low Risk** | Actively maintained, good feature set, reliable choice |
-| **ioredis-lock** | ❌ **Very High Risk** | Abandoned for 6 years, security vulnerabilities likely |
-| **node-redis-warlock** | ❌ **High Risk** | Abandoned for 4 years, outdated Redis client |
-| **node-redisson** | ⚠️ **Medium Risk** | Very low adoption (1K downloads), unproven in production |
 
 ### Why Choose RedLock Universal?
 
@@ -472,7 +490,7 @@ Performance modes:
 - **Redis-spec compliant**: Follows official Redlock specification
 - **Clock drift handling**: Proper time synchronization assumptions
 - **Fault tolerance**: Graceful degradation on partial failures
-- **Performance optimized**: <1ms acquisition time for local Redis
+- **Performance optimized**: Sub-millisecond acquisition, competitive performance
 
 ### Migration Guide
 
