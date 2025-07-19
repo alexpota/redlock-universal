@@ -420,43 +420,43 @@ npm run benchmark
 
 ### Feature Comparison
 
-| Feature | RedLock Universal | node-redlock | redis-semaphore | ioredis-lock | node-redis-warlock |
-|---------|-------------------|--------------|-----------------|--------------|-------------------|
+| Feature | RedLock Universal | node-redlock | redis-semaphore |
+|---------|-------------------|--------------|-----------------|
 | **Client Support** |
-| node-redis v4+ | ✅ Native | ❌ | ⚠️ Wrapper needed | ❌ | ✅ v0.x only |
-| ioredis v5+ | ✅ Native | ✅ Required | ✅ Native | ✅ Native | ❌ |
+| node-redis v4+ | ✅ Native | ❌ | ⚠️ Wrapper needed |
+| ioredis v5+ | ✅ Native | ✅ Required | ✅ Native |
 | **Language & Developer Experience** |
-| TypeScript | ✅ First-class | ✅ Native | ✅ Native | ❌ None | ❌ None |
-| Modern ESM | ✅ | ⚠️ CJS focus | ✅ | ❌ | ❌ |
-| API Design | ✅ Intuitive | ⚠️ Complex | ✅ Clean | ⚠️ Basic | ⚠️ Basic |
-| Error Types | ✅ Specific | ✅ Basic | ✅ Detailed | ⚠️ Generic | ⚠️ Generic |
+| TypeScript | ✅ First-class | ✅ Native | ✅ Native |
+| Modern ESM | ✅ | ⚠️ CJS focus | ✅ |
+| API Design | ✅ Intuitive | ⚠️ Complex | ✅ Clean |
+| Error Types | ✅ Specific | ✅ Basic | ✅ Detailed |
 | **Locking Capabilities** |
-| Single Instance | ✅ Optimized | ❌ | ✅ | ✅ | ✅ |
-| Distributed (Redlock) | ✅ Full spec | ✅ Full spec | ✅ RedlockMutex | ❌ | ❌ |
-| Lock Extension | ✅ Manual/Auto | ✅ Watchdog | ✅ Auto-refresh | ✅ Manual | ✅ Manual |
-| Semaphores | ❌ Planned | ❌ | ✅ Advanced | ❌ | ❌ |
+| Single Instance | ✅ Optimized | ❌ | ✅ |
+| Distributed (Redlock) | ✅ Full spec | ✅ Full spec | ✅ RedlockMutex |
+| Lock Extension | ✅ Manual/Auto | ✅ Watchdog | ✅ Auto-refresh |
+| Semaphores | ❌ Planned | ❌ | ✅ Advanced |
 | **Production Features** |
-| Retry Logic | ✅ Configurable | ✅ Built-in | ✅ Fair queue | ✅ Basic | ❌ |
-| Monitoring | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Health Checks | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Structured Logging | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| Retry Logic | ✅ Configurable | ✅ Built-in | ✅ Fair queue |
+| Monitoring | ✅ Built-in | ❌ | ❌ |
+| Health Checks | ✅ Built-in | ❌ | ❌ |
+| Structured Logging | ✅ Built-in | ❌ | ❌ |
 
 ### Technical Comparison (Verified Data)
 
-| Metric | RedLock Universal | node-redlock | redis-semaphore | ioredis-lock | node-redis-warlock |
-|--------|-------------------|--------------|-----------------|--------------|-------------------|
+| Metric | RedLock Universal | node-redlock | redis-semaphore |
+|--------|-------------------|--------------|-----------------|
 | **Maintenance & Adoption** |
-| Weekly Downloads | *New Package* | 644,599 | 282,020 | 1,964 | 39,613 |
-| Last Updated | 2025 Active | Mar 2022 ⚠️ | Mar 2025 ✅ | Feb 2019 ❌ | Oct 2021 ❌ |
-| Maintenance Status | ✅ Active | ⚠️ Stale (3y) | ✅ Active | ❌ Abandoned (6y) | ❌ Stale (4y) |
+| Weekly Downloads | *New Package* | 644,599 | 282,020 |
+| Last Updated | 2025 Active | Mar 2022 ⚠️ | Mar 2025 ✅ |
+| Maintenance Status | ✅ Active | ⚠️ Stale (3y) | ✅ Active |
 | **Package Quality** |
-| Runtime Dependencies | 0 (peer only) | 1 | 1 | 3 | 2 |
-| TypeScript Support | ✅ Native | ✅ Native | ✅ Native | ❌ None | ❌ None |
-| Test Coverage | 95%+ | Unknown | Unknown | Unknown | Unknown |
+| Runtime Dependencies | 0 (peer only) | 1 | 1 |
+| TypeScript Support | ✅ Native | ✅ Native | ✅ Native |
+| Test Coverage | 95%+ | Unknown | Unknown |
 | **Performance Characteristics** |
-| Lock Acquisition† | ~0.4-0.8ms | ~0.4-0.8ms | ~0.4-0.6ms | ~0.9ms | ~1.1ms |
-| Distributed Latency* | ~3-8ms | ~5-15ms | ~4-10ms | N/A | N/A |
-| Memory per Operation† | <7KB | ~8KB | ~6KB | ~5KB | ~3KB |
+| Lock Acquisition† | ~0.4-0.8ms | ~0.4-0.8ms | ~0.4-0.6ms |
+| Distributed Latency* | ~3-8ms | ~5-15ms | ~4-10ms |
+| Memory per Operation† | <7KB | ~8KB | ~6KB |
 
 *\*Estimated/measured with local Redis 7. Performance is competitive among actively maintained libraries. †Actual performance varies by network latency and Redis configuration.*
 
@@ -466,9 +466,6 @@ npm run benchmark
 |---------|--------|-----------------|
 | **redlock** | ⚠️ **High Risk** | 644K weekly users but no updates in 3 years. Critical security/compatibility issues possible |
 | **redis-semaphore** | ✅ **Low Risk** | Actively maintained, good feature set, reliable choice |
-| **ioredis-lock** | ❌ **Very High Risk** | Abandoned for 6 years, security vulnerabilities likely |
-| **node-redis-warlock** | ❌ **High Risk** | Abandoned for 4 years, outdated Redis client |
-| **node-redisson** | ⚠️ **Medium Risk** | Very low adoption (1K downloads), unproven in production |
 
 ### Why Choose RedLock Universal?
 
