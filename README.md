@@ -81,9 +81,19 @@ import { createClient } from 'redis';
 import Redis from 'ioredis';
 
 // Setup multiple Redis connections
+const clients = [
+  createClient({ url: 'redis://redis1:6379' }),
+  createClient({ url: 'redis://redis2:6379' }),
+  createClient({ url: 'redis://redis3:6379' }),
+];
+
+// Connect all node-redis clients
+await Promise.all(clients.map(client => client.connect()));
+
+// Create adapters (ioredis connects automatically)
 const adapters = [
-  new NodeRedisAdapter(createClient({ url: 'redis://redis1:6379' })),
-  new NodeRedisAdapter(createClient({ url: 'redis://redis2:6379' })),
+  new NodeRedisAdapter(clients[0]),
+  new NodeRedisAdapter(clients[1]),
   new IoredisAdapter(new Redis('redis://redis3:6379')),
 ];
 
@@ -105,6 +115,9 @@ try {
   await redlock.release(handle);
 } catch (error) {
   console.error('Distributed lock failed:', error);
+} finally {
+  // Disconnect all clients
+  await Promise.all(clients.map(client => client.disconnect()));
 }
 ```
 
@@ -175,7 +188,7 @@ const leanLock = createLock({
 Creates a distributed lock using the Redlock algorithm.
 
 ```typescript
-interface RedLockConfig {
+interface CreateRedlockConfig {
   adapters: RedisAdapter[];
   key: string;
   ttl?: number;                // Default: 30000ms
