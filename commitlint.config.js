@@ -18,7 +18,7 @@ export default {
         'revert'    // Reverting changes
       ]
     ],
-    'subject-case': [2, 'always', 'sentence-case'],
+    'subject-case': [0], // Disabled - allow any case
     'subject-max-length': [2, 'always', 72],
     'body-max-line-length': [0],  // Disable body line length check for semantic-release compatibility
     'footer-max-line-length': [0]  // Disable footer line length check for semantic-release compatibility

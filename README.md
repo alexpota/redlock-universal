@@ -1,27 +1,27 @@
-# RedLock Universal
+# redlock-universal
 
 > Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis
 
 [![npm version](https://img.shields.io/npm/v/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 [![Node.js](https://img.shields.io/node/v/redlock-universal.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Test Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](./coverage)
+[![Test Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 
 ## Overview
 
-RedLock Universal implements distributed Redis locks using the [Redlock algorithm](https://redis.io/docs/manual/patterns/distributed-locks/). It supports both node-redis and ioredis clients through a unified TypeScript API.
+redlock-universal implements distributed Redis locks using the [Redlock algorithm](https://redis.io/docs/manual/patterns/distributed-locks/). It supports both node-redis and ioredis clients through a unified TypeScript API.
 
 ## Features
 
 - 🔒 **Distributed Locks**: True Redlock algorithm for multi-instance Redis
 - 🔌 **Client Universal**: Works with both `node-redis` v4+ and `ioredis` v5+
-- 🏢 **Production Ready**: Comprehensive error handling, retries, and monitoring
+- 🏢 **Production Ready**: Error handling, retries, and monitoring
 - 🚀 **TypeScript First**: Full type safety and modern ESM support
 - ⚡ **Performance**: Sub-millisecond lock acquisition, competitive with leading libraries
 - 📊 **Monitoring**: Built-in metrics and health checks
-- 🧪 **Tested**: 95%+ test coverage with integration tests
+- 🧪 **Tested**: 85%+ test coverage with unit and integration tests
 
 ## Installation
 
@@ -394,12 +394,12 @@ console.log('Quorum achieved:', redlockHandle.metadata.nodes.length >= quorum);
 
 ## Performance
 
-RedLock Universal delivers competitive performance:
+redlock-universal delivers competitive performance:
 
 - **Lock acquisition**: Sub-millisecond latency (typically 0.4-0.8ms with local Redis)
 - **Memory usage**: <7KB per operation (both standard and lean modes)
 - **Throughput**: >1000 ops/sec (competitive with leading Redis lock libraries)
-- **Test coverage**: 95%+ with comprehensive integration tests
+- **Test coverage**: 85%+ with unit and integration tests
 
 Performance modes:
 - **Standard** (default): Full monitoring and observability features
@@ -408,7 +408,7 @@ Performance modes:
 
 ### Benchmarking
 
-We provide comprehensive benchmarks to validate performance claims:
+We provide benchmarks to validate performance claims:
 
 ```bash
 # Compare with leading Redis lock libraries
@@ -433,7 +433,7 @@ npm run benchmark
 
 ### Feature Comparison
 
-| Feature | RedLock Universal | node-redlock | redis-semaphore |
+| Feature | redlock-universal | node-redlock | redis-semaphore |
 |---------|-------------------|--------------|-----------------|
 | **Client Support** |
 | node-redis v4+ | ✅ Native | ❌ | ⚠️ Wrapper needed |
@@ -456,7 +456,7 @@ npm run benchmark
 
 ### Technical Comparison (Verified Data)
 
-| Metric | RedLock Universal | node-redlock | redis-semaphore |
+| Metric | redlock-universal | node-redlock | redis-semaphore |
 |--------|-------------------|--------------|-----------------|
 | **Maintenance & Adoption** |
 | Weekly Downloads | *New Package* | 644,599 | 282,020 |
@@ -465,7 +465,7 @@ npm run benchmark
 | **Package Quality** |
 | Runtime Dependencies | 0 (peer only) | 1 | 1 |
 | TypeScript Support | ✅ Native | ✅ Native | ✅ Native |
-| Test Coverage | 95%+ | Unknown | Unknown |
+| Test Coverage | 85%+ Unit + Integration | Unknown | Unknown |
 | **Performance Characteristics** |
 | Lock Acquisition† | ~0.4-0.8ms | ~0.4-0.8ms | ~0.4-0.6ms |
 | Distributed Latency* | ~3-8ms | ~5-15ms | ~4-10ms |
@@ -480,7 +480,7 @@ npm run benchmark
 | **redlock** | ⚠️ **High Risk** | 644K weekly users but no updates in 3 years. Critical security/compatibility issues possible |
 | **redis-semaphore** | ✅ **Low Risk** | Actively maintained, good feature set, reliable choice |
 
-### Why Choose RedLock Universal?
+### Why Choose redlock-universal?
 
 #### ✅ **Universal Compatibility**
 - **Only library** supporting both node-redis v4+ and ioredis v5+ natively
@@ -497,7 +497,7 @@ npm run benchmark
 - **TypeScript-first**: Strict typing, excellent IntelliSense
 - **ESM native**: Modern module system with CommonJS compatibility
 - **Zero runtime dependencies**: Security and supply chain safety
-- **Elite code quality**: 95%+ test coverage, comprehensive integration tests
+- **Code quality**: 85%+ test coverage with unit and integration tests
 
 #### ✅ **Proven Algorithm Implementation**
 - **Redis-spec compliant**: Follows official Redlock specification
@@ -514,7 +514,7 @@ const redlock = new Redlock([redis1, redis2], { retryCount: 3 });
 const resource = await redlock.acquire(['resource'], 30000);
 await redlock.release(resource);
 
-// After (RedLock Universal) - Modern & maintained
+// After (redlock-universal) - Modern & maintained
 const redlock = createRedlock({
   adapters: [new IoredisAdapter(redis1), new IoredisAdapter(redis2)],
   key: 'resource',
@@ -532,7 +532,7 @@ const mutex = new Mutex(redis, 'resource', { acquireTimeout: 30000 });
 const release = await mutex.acquire();
 release();
 
-// After (RedLock Universal) - Universal client support + monitoring
+// After (redlock-universal) - Universal client support + monitoring
 const lock = createLock({
   adapter: new NodeRedisAdapter(nodeRedisClient), // or IoredisAdapter
   key: 'resource', 

@@ -5,7 +5,7 @@ import { createLock } from '../../src/index.js';
 import { NodeRedisAdapter, IoredisAdapter } from '../../src/adapters/index.js';
 import { generateTestKey, getRedisUrl } from '../shared/constants.js';
 
-describe('RedLock Universal E2E Tests', () => {
+describe('redlock-universal E2E Tests', () => {
   let nodeRedisClient: any;
   let ioredisClient: Redis;
 

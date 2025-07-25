@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document explains how to run tests for RedLock Universal, including integration tests with real Redis instances using Docker.
+This document explains how to run tests for redlock-universal, including integration tests with real Redis instances using Docker.
 
 ## Quick Start
 

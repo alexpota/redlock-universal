@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial implementation of RedLock Universal library
+- Initial implementation of redlock-universal library
 - Support for both node-redis v4+ and ioredis v5+ clients
 - Distributed locking using Redlock algorithm
 - Single instance locking with SimpleLock

@@ -1,6 +1,6 @@
-# RedLock Universal Examples
+# redlock-universal Examples
 
-This directory contains practical examples demonstrating how to use RedLock Universal in various scenarios.
+This directory contains practical examples demonstrating how to use redlock-universal in various scenarios.
 
 ## Prerequisites
 

@@ -1,5 +1,5 @@
 /**
- * Structured logger for RedLock Universal
+ * Structured logger for redlock-universal
  */
 
 export enum LogLevel {

@@ -1,5 +1,5 @@
 /**
- * Lock with retry example using RedLock Universal
+ * Lock with retry example using redlock-universal
  * 
  * This example demonstrates lock acquisition with retry logic for contested resources.
  */

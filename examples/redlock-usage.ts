@@ -354,7 +354,7 @@ async function simulatePaymentProcessing(handle: LockHandle, redlock: RedLock) {
 
 // Run all examples
 async function runAllExamples() {
-  console.log('🚀 RedLock Universal - Distributed Locking Examples\n');
+  console.log('🚀 redlock-universal - Distributed Locking Examples\n');
 
   try {
     await basicRedlockExample();

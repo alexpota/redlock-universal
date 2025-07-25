@@ -1,5 +1,5 @@
 /**
- * Monitoring example using RedLock Universal
+ * Monitoring example using redlock-universal
  * 
  * This example demonstrates how to use the built-in monitoring features.
  */

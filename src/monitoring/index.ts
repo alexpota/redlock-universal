@@ -1,5 +1,5 @@
 /**
- * Monitoring utilities for RedLock Universal
+ * Monitoring utilities for redlock-universal
  */
 
 export { MetricsCollector } from './MetricsCollector.js';
