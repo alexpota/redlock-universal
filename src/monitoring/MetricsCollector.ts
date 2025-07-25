@@ -1,5 +1,5 @@
 /**
- * Metrics collector for RedLock Universal operations
+ * Metrics collector for redlock-universal operations
  */
 
 export interface LockMetrics {

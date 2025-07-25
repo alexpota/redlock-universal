@@ -1,6 +1,6 @@
 # Test Structure
 
-This directory contains comprehensive tests for the RedLock Universal library, organized following Node.js best practices and modern development guidelines.
+This directory contains comprehensive tests for the redlock-universal library, organized following Node.js best practices and modern development guidelines.
 
 ## Test Organization
 

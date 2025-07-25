@@ -1,5 +1,5 @@
 /**
- * Simple lock example using RedLock Universal
+ * Simple lock example using redlock-universal
  * 
  * This example demonstrates basic lock usage with a single Redis instance.
  */

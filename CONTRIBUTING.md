@@ -1,6 +1,6 @@
-# Contributing to RedLock Universal
+# Contributing to redlock-universal
 
-We love your input! We want to make contributing to RedLock Universal as easy and transparent as possible, whether it's:
+We love your input! We want to make contributing to redlock-universal as easy and transparent as possible, whether it's:
 
 - Reporting a bug
 - Discussing the current state of the code
@@ -340,4 +340,4 @@ Contributors will be recognized in:
 - Release notes for significant contributions
 - Documentation credits
 
-Thank you for contributing to RedLock Universal! 🚀
+Thank you for contributing to redlock-universal! 🚀

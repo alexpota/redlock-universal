@@ -1,5 +1,5 @@
 /**
- * Distributed lock example using RedLock Universal
+ * Distributed lock example using redlock-universal
  *
  * This example demonstrates distributed locking across multiple Redis instances.
  */

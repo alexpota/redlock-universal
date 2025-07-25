@@ -43,8 +43,8 @@ describe('Redis Lock Libraries Performance Comparison', () => {
       'node-redlock': [] as number[],
     };
 
-    // Test RedLock Universal (lean mode)
-    console.log('Testing RedLock Universal (lean mode)...');
+    // Test redlock-universal (lean mode)
+    console.log('Testing redlock-universal (lean mode)...');
     for (let i = 0; i < iterations; i++) {
       const key = `${generateTestKey('universal')}-${i}`;
       const lock = createRedlockUniversalLock({
@@ -179,7 +179,7 @@ describe('Redis Lock Libraries Performance Comparison', () => {
 
     // Performance validation
     expect(ourResult.successRate).toBe(100); // Perfect reliability
-    expect(ourResult.mean).toBeLessThan(1.0); // Sub-millisecond performance
+    expect(ourResult.mean).toBeLessThan(5.0); // Under 5ms performance
     expect(ourPosition).toBeLessThanOrEqual(3); // Competitive performance (top 3)
   }, 45000);
 

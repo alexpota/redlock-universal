@@ -32,7 +32,7 @@ export default defineConfig({
   banner: {
     js: `
 /**
- * RedLock Universal
+ * redlock-universal
  * Production-ready distributed Redis locks for Node.js
  */`.trim(),
   },

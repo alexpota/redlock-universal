@@ -1,5 +1,5 @@
 /**
- * Lock extension example using RedLock Universal
+ * Lock extension example using redlock-universal
  * 
  * This example demonstrates extending lock TTL for long-running operations.
  */
