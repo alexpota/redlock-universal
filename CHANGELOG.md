@@ -1,3 +1,39 @@
+# [0.5.0](https://github.com/alexpota/redlock-universal/compare/v0.4.1...v0.5.0) (2025-07-19)
+
+
+### Features
+
+* Correct distributed lock usage examples in README ([81a1cf5](https://github.com/alexpota/redlock-universal/commit/81a1cf5ba5e3c9ba4ec7e7b12b3cf95031e5b4e1))
+
+# [0.4.1](https://github.com/alexpota/redlock-universal/compare/v0.4.0...v0.4.1) (2025-07-19)
+
+
+### Bug Fixes
+
+* Correct distributed lock usage examples in README ([81a1cf5](https://github.com/alexpota/redlock-universal/commit/81a1cf5ba5e3c9ba4ec7e7b12b3cf95031e5b4e1))
+
+# [0.4.0](https://github.com/alexpota/redlock-universal/compare/v0.3.0...v0.4.0) (2025-07-19)
+
+
+### Features
+
+* Add professional benchmark infrastructure with competitive ([#19](https://github.com/alexpota/redlock-universal/issues/19)) ([fb8670f](https://github.com/alexpota/redlock-universal/commit/fb8670f9a6d67b4430f2a6823cffe96ee9e6b08a))
+
+# [0.3.0](https://github.com/alexpota/redlock-universal/compare/v0.2.0...v0.3.0) (2025-07-18)
+
+
+### Bug Fixes
+
+* Disable footer line length check for semantic-release compatibility ([#15](https://github.com/alexpota/redlock-universal/issues/15)) ([c1abb0b](https://github.com/alexpota/redlock-universal/commit/c1abb0bfc154c6879f40c75464fa14268468c28b))
+* Remove semantic-release/git plugin to resolve branch protection conflicts ([#18](https://github.com/alexpota/redlock-universal/issues/18)) ([fd95001](https://github.com/alexpota/redlock-universal/commit/fd95001dcb7785387d639097625e55f3166013ef))
+* Use GH_TOKEN for semantic-release authentication ([#17](https://github.com/alexpota/redlock-universal/issues/17)) ([e003911](https://github.com/alexpota/redlock-universal/commit/e003911c63eded32714b783e4d2c8f6fe9062b45))
+* Use PAT for semantic-release with branch protection ([#16](https://github.com/alexpota/redlock-universal/issues/16)) ([1fb9a08](https://github.com/alexpota/redlock-universal/commit/1fb9a089207af51fd353d936f660e686f4952628))
+
+
+### Features
+
+* Add code of conduct file ([#14](https://github.com/alexpota/redlock-universal/issues/14)) ([4cbacd9](https://github.com/alexpota/redlock-universal/commit/4cbacd99ffb712ebd15c927acfe697b15dc80392))
+
 # [0.2.0](https://github.com/alexpota/redlock-universal/compare/v0.1.4...v0.2.0) (2025-07-17)
 
 
