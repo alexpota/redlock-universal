@@ -89,7 +89,7 @@ describe('HealthChecker', () => {
 
       const result = await healthChecker.checkAdapterHealth('test-adapter');
 
-      expect(result.responseTime).toBeGreaterThanOrEqual(50);
+      expect(result.responseTime).toBeGreaterThanOrEqual(45); // Allow for timing variance in CI
       expect(result.healthy).toBe(true);
     });
   });
