@@ -11,7 +11,7 @@
 
 ## Overview
 
-redlock-universal implements distributed Redis locks using the [Redlock algorithm](https://redis.io/docs/manual/patterns/distributed-locks/). It supports both node-redis and ioredis clients through a unified TypeScript API.
+redlock-universal implements distributed Redis locks using the [Redlock algorithm](http://redis.io/topics/distlock). It supports both node-redis and ioredis clients through a unified TypeScript API.
 
 ## Features
 
