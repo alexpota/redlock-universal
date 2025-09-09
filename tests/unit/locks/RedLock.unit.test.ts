@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
 import type { RedLockConfig } from '../../../src/types/locks.js';
-import { generateTestKey, TEST_STRINGS } from '../../shared/constants.js';
+import {
+  generateTestKey,
+  TEST_STRINGS,
+  TEST_CONFIG,
+  TIMING_CONFIG,
+} from '../../shared/constants.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -140,11 +145,11 @@ describe('RedLock', () => {
     const config: RedLockConfig = {
       adapters,
       key: testKey,
-      ttl: 10000,
-      quorum: 3, // Majority of 5
-      retryAttempts: 2,
-      retryDelay: 50,
-      clockDriftFactor: 0.01,
+      ttl: TEST_CONFIG.LONG_TTL,
+      quorum: TEST_CONFIG.DEFAULT_QUORUM_5, // Majority of 5
+      retryAttempts: TEST_CONFIG.DEFAULT_RETRY_ATTEMPTS,
+      retryDelay: TEST_CONFIG.FAST_RETRY_DELAY,
+      clockDriftFactor: TEST_CONFIG.DEFAULT_CLOCK_DRIFT,
     };
 
     redlock = new RedLock(config);
@@ -178,7 +183,7 @@ describe('RedLock', () => {
         new RedLock({
           adapters: [adapters[0]],
           key: getTestKey(),
-          ttl: -1000,
+          ttl: TEST_CONFIG.INVALID_TTL,
         });
       }).toThrow('TTL must be a positive integer');
     });
@@ -198,7 +203,7 @@ describe('RedLock', () => {
         new RedLock({
           adapters: [adapters[0]],
           key: getTestKey(),
-          clockDriftFactor: 1.5,
+          clockDriftFactor: 1.5, // Invalid - greater than 1
         });
       }).toThrow('Clock drift factor must be between 0 and 1');
     });
@@ -225,7 +230,7 @@ describe('RedLock', () => {
         key: redlock.getConfig().key,
         value: expect.any(String),
         acquiredAt: expect.any(Number),
-        ttl: 10000,
+        ttl: TEST_CONFIG.LONG_TTL,
         metadata: expect.objectContaining({
           strategy: 'redlock',
           attempts: 1,
@@ -256,7 +261,7 @@ describe('RedLock', () => {
         adapters[0].shouldFailSetNX = false;
         adapters[1].shouldFailSetNX = false;
         adapters[2].shouldFailSetNX = false;
-      }, 75); // After retry delay of 50ms
+      }, TIMING_CONFIG.UNIT_RETRY_TIMEOUT_BUFFER); // After retry delay of 50ms
 
       const handle = await redlock.acquire();
 
@@ -287,8 +292,8 @@ describe('RedLock', () => {
       const fastRedlock = new RedLock({
         adapters,
         key: getTestKey(),
-        ttl: 5500, // 5.5 seconds - less than latency + drift
-        clockDriftFactor: 0.1, // Higher drift factor for test
+        ttl: TEST_CONFIG.CLOCK_DRIFT_TTL, // 5.5 seconds - less than latency + drift
+        clockDriftFactor: TEST_CONFIG.HIGH_CLOCK_DRIFT, // Higher drift factor for test
         retryAttempts: 0, // No retries for faster test
       });
 
@@ -304,7 +309,7 @@ describe('RedLock', () => {
       await expect(redlock.acquire()).rejects.toThrow(LockAcquisitionError);
 
       // Verify partial locks were cleaned up
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, TIMING_CONFIG.UNIT_QUICK_DELAY));
       const testKey = redlock.getConfig().key;
       const lockedNodes = adapters.filter(adapter => adapter.hasKey(testKey));
       expect(lockedNodes.length).toBe(0);
@@ -382,7 +387,7 @@ describe('RedLock', () => {
         key: 'wrong-key',
         value: 'wrong-value',
         acquiredAt: Date.now(),
-        ttl: 10000,
+        ttl: TEST_CONFIG.LONG_TTL,
       };
 
       await expect(redlock.release(invalidHandle)).rejects.toThrow(
@@ -396,7 +401,7 @@ describe('RedLock', () => {
         key: redlock.getConfig().key,
         value: '',
         acquiredAt: Date.now(),
-        ttl: 10000,
+        ttl: TEST_CONFIG.LONG_TTL,
       };
 
       await expect(redlock.release(invalidHandle)).rejects.toThrow(
@@ -495,11 +500,11 @@ describe('RedLock', () => {
       expect(config).toMatchObject({
         adapters: expect.any(Array),
         key: redlock.getConfig().key,
-        ttl: 10000,
-        quorum: 3,
-        retryAttempts: 2,
-        retryDelay: 50,
-        clockDriftFactor: 0.01,
+        ttl: TEST_CONFIG.LONG_TTL,
+        quorum: TEST_CONFIG.DEFAULT_QUORUM_5,
+        retryAttempts: TEST_CONFIG.DEFAULT_RETRY_ATTEMPTS,
+        retryDelay: TEST_CONFIG.FAST_RETRY_DELAY,
+        clockDriftFactor: TEST_CONFIG.DEFAULT_CLOCK_DRIFT,
       });
 
       // Verify it's a copy, not reference
@@ -531,7 +536,7 @@ describe('RedLock', () => {
       const singleNodeLock = new RedLock({
         adapters: [adapters[0]],
         key: getTestKey(),
-        quorum: 1,
+        quorum: TEST_CONFIG.SINGLE_RETRY_ATTEMPT,
       });
 
       const handle = await singleNodeLock.acquire();
@@ -561,6 +566,141 @@ describe('RedLock', () => {
       // Only one should succeed
       expect(successful.length).toBe(1);
       expect(failed.length).toBe(2);
+    });
+
+    describe('using() API', () => {
+      it('should execute routine with automatic lock management', async () => {
+        // Setup adapters to succeed on quorum
+        adapters[0].reset();
+        adapters[1].reset();
+        adapters[2].reset();
+
+        const testKey = getTestKey();
+        const testRedlock = new RedLock({
+          adapters,
+          key: testKey,
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          quorum: TEST_CONFIG.DEFAULT_QUORUM_3,
+        });
+
+        let routineExecuted = false;
+        const result = await testRedlock.using(async signal => {
+          routineExecuted = true;
+          expect(signal).toBeDefined();
+          expect(signal.aborted).toBe(false);
+          expect(signal.error).toBeUndefined();
+
+          // Verify lock is held on at least quorum nodes
+          const lockedNodes = adapters.filter(a => a.hasKey(testKey)).length;
+          expect(lockedNodes).toBeGreaterThanOrEqual(2);
+
+          return 'test-result';
+        });
+
+        expect(result).toBe('test-result');
+        expect(routineExecuted).toBe(true);
+
+        // Verify locks are released
+        const remainingLocks = adapters.filter(a => a.hasKey(testKey)).length;
+        expect(remainingLocks).toBe(0);
+      });
+
+      it('should handle routine errors and still cleanup', async () => {
+        adapters.forEach(a => a.reset());
+
+        const testKey = getTestKey();
+        const testRedlock = new RedLock({
+          adapters,
+          key: testKey,
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          quorum: TEST_CONFIG.DEFAULT_QUORUM_3,
+        });
+
+        const testError = new Error('Routine failed');
+
+        await expect(
+          testRedlock.using(async () => {
+            throw testError;
+          })
+        ).rejects.toThrow('Routine failed');
+
+        // Verify locks are still released after error
+        const remainingLocks = adapters.filter(a => a.hasKey(testKey)).length;
+        expect(remainingLocks).toBe(0);
+      });
+
+      it('should provide AbortSignal to routine', async () => {
+        adapters.forEach(a => a.reset());
+
+        const testKey = getTestKey();
+        const testRedlock = new RedLock({
+          adapters,
+          key: testKey,
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          quorum: TEST_CONFIG.DEFAULT_QUORUM_3,
+        });
+
+        let signalReceived: AbortSignal | undefined;
+
+        await testRedlock.using(async signal => {
+          signalReceived = signal;
+
+          // Verify signal has expected properties
+          expect(typeof signal.aborted).toBe('boolean');
+          expect(signal.addEventListener).toBeDefined();
+          expect(signal.removeEventListener).toBeDefined();
+
+          // Signal should have error property (even if undefined)
+          expect('error' in signal).toBe(true);
+
+          return 'done';
+        });
+
+        expect(signalReceived).toBeDefined();
+      });
+
+      it('should handle lock acquisition failure', async () => {
+        // Make all adapters fail to acquire lock
+        adapters.forEach(a => {
+          a.reset();
+          a.shouldFailSetNX = true;
+        });
+
+        const testKey = getTestKey();
+        const testRedlock = new RedLock({
+          adapters,
+          key: testKey,
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          quorum: TEST_CONFIG.DEFAULT_QUORUM_3,
+          retryAttempts: 0, // Don't retry for faster test
+        });
+
+        const mockRoutine = vi.fn();
+
+        await expect(testRedlock.using(mockRoutine)).rejects.toThrow(LockAcquisitionError);
+
+        // Routine should not be called if lock acquisition fails
+        expect(mockRoutine).not.toHaveBeenCalled();
+      });
+
+      it('should release lock even if routine returns immediately', async () => {
+        adapters.forEach(a => a.reset());
+
+        const testKey = getTestKey();
+        const testRedlock = new RedLock({
+          adapters,
+          key: testKey,
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          quorum: TEST_CONFIG.DEFAULT_QUORUM_3,
+        });
+
+        // Very fast routine
+        await testRedlock.using(async () => 'instant');
+
+        // All locks should be released
+        const remainingLocks = adapters.filter(a => a.hasKey(testKey)).length;
+        expect(remainingLocks).toBe(0);
+      });
     });
   });
 });

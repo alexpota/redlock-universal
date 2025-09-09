@@ -5,9 +5,19 @@
 
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, RedLockConfig } from '../types/locks.js';
+import type { Logger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockId, generateLockValue, safeCompare } from '../utils/crypto.js';
+import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
+
+// Redis response constants
+const REDIS_OK_RESPONSE = 'OK';
+
+// RedLock algorithm constants
+const DISTRIBUTED_RETRY_MULTIPLIER = 2;
+const QUORUM_DIVISOR = 2;
+const QUORUM_OFFSET = 1;
 
 /**
  * Result of attempting to acquire a lock on a single Redis node
@@ -31,19 +41,21 @@ interface NodeLockResult {
  */
 export class RedLock implements Lock {
   private readonly adapters: readonly RedisAdapter[];
-  private readonly config: Required<RedLockConfig>;
+  private readonly config: Required<Omit<RedLockConfig, 'logger'>> & { logger?: Logger };
 
   constructor(config: RedLockConfig) {
     this.adapters = config.adapters;
-    this.config = {
+    const baseConfig = {
       adapters: config.adapters,
       key: config.key,
       ttl: config.ttl ?? DEFAULTS.TTL,
-      quorum: config.quorum ?? Math.floor(config.adapters.length / 2) + 1,
+      quorum: config.quorum ?? Math.floor(config.adapters.length / QUORUM_DIVISOR) + QUORUM_OFFSET,
       retryAttempts: config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS,
-      retryDelay: config.retryDelay ?? DEFAULTS.RETRY_DELAY * 2, // Distributed locks need more time
+      retryDelay: config.retryDelay ?? DEFAULTS.RETRY_DELAY * DISTRIBUTED_RETRY_MULTIPLIER,
       clockDriftFactor: config.clockDriftFactor ?? DEFAULTS.CLOCK_DRIFT_FACTOR,
     };
+
+    this.config = config.logger ? { ...baseConfig, logger: config.logger } : baseConfig;
 
     this.validateConfig();
   }
@@ -212,7 +224,7 @@ export class RedLock implements Lock {
       const operationTime = Date.now() - startTime;
 
       return {
-        success: result === 'OK',
+        success: result === REDIS_OK_RESPONSE,
         adapter,
         nodeId,
         operationTime,
@@ -381,9 +393,37 @@ export class RedLock implements Lock {
   }
 
   /**
+   * Get the underlying Redis adapter for atomic operations
+   * RedLock manages multiple adapters, so returns null
+   */
+  getAdapter(): RedisAdapter | null {
+    return null;
+  }
+
+  /**
    * Get quorum requirement
    */
   getQuorum(): number {
     return this.config.quorum;
+  }
+
+  /**
+   * Execute a routine with automatic lock management and extension
+   * Auto-extends when remaining TTL < 20% (extends at ~80% consumed)
+   * Uses quorum-based extension strategy (continues if majority of nodes succeed)
+   * Provides AbortSignal when extension fails
+   */
+  async using<T>(routine: (signal: ExtendedAbortSignal) => Promise<T>): Promise<T> {
+    const handle = await this.acquire();
+    const baseConfig = {
+      locks: [this],
+      handles: [handle],
+      ttl: this.config.ttl,
+      routine,
+    };
+
+    return executeWithAutoExtension(
+      this.config.logger ? { ...baseConfig, logger: this.config.logger } : baseConfig
+    );
   }
 }

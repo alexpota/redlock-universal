@@ -7,6 +7,9 @@ import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { DEFAULTS } from '../constants.js';
 
+// Redis response constants
+const REDIS_OK_RESPONSE = 'OK';
+
 // Pre-allocated error to avoid stack trace overhead
 const LOCK_HELD_ERROR = new Error('Lock already held');
 LOCK_HELD_ERROR.stack = '';
@@ -49,7 +52,7 @@ export class LeanSimpleLock implements Lock {
       try {
         const result = await this.a.setNX(this.k, value, this.t);
 
-        if (result === 'OK') {
+        if (result === REDIS_OK_RESPONSE) {
           const acquisitionTime = Date.now() - startTime;
 
           return {
@@ -110,5 +113,13 @@ export class LeanSimpleLock implements Lock {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Get the underlying Redis adapter for atomic operations
+   * @returns Redis adapter instance
+   */
+  getAdapter(): RedisAdapter {
+    return this.a;
   }
 }

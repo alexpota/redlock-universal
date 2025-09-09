@@ -6,3 +6,10 @@ export {
   parseLockValue,
   isValidLockValue,
 } from './crypto.js';
+
+export {
+  executeWithAutoExtension,
+  executeWithSingleLockExtension,
+  type AutoExtensionConfig,
+  type ExtendedAbortSignal,
+} from './auto-extension.js';

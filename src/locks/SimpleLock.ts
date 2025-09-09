@@ -1,8 +1,16 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
+import type { Logger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
+import {
+  executeWithSingleLockExtension,
+  type ExtendedAbortSignal,
+} from '../utils/auto-extension.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
+
+// Redis response constants
+const REDIS_OK_RESPONSE = 'OK';
 
 /**
  * Simple lock implementation for single Redis instance
@@ -15,6 +23,7 @@ export class SimpleLock implements Lock {
   private readonly ttl: number;
   private readonly retryAttempts: number;
   private readonly retryDelay: number;
+  private readonly logger: Logger | undefined;
   private readonly correlationId?: string;
   private readonly onAcquire?: (handle: LockHandle) => void;
   private readonly onRelease?: (handle: LockHandle) => void;
@@ -43,6 +52,7 @@ export class SimpleLock implements Lock {
     this.ttl = config.ttl ?? DEFAULTS.TTL;
     this.retryAttempts = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
     this.retryDelay = config.retryDelay ?? DEFAULTS.RETRY_DELAY;
+    this.logger = config.logger;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.correlationId = (config as any).correlationId;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,12 +100,11 @@ export class SimpleLock implements Lock {
       this._circuitBreakerFailures = 0;
       if (this._circuitBreakerState === 'half-open') {
         this._circuitBreakerState = 'closed';
-        if (process.env.NODE_ENV !== 'test') {
-          // eslint-disable-next-line no-console
-          console.log('Circuit breaker closed - Redis recovered', {
+        if (this.logger) {
+          this.logger.info('Circuit breaker closed - Redis recovered', {
             key: this.key,
             correlationId: this.correlationId,
-            timestamp: new Date().toISOString(),
+            circuitBreakerState: this._circuitBreakerState,
           });
         }
       }
@@ -108,13 +117,12 @@ export class SimpleLock implements Lock {
       ) {
         this._circuitBreakerState = 'open';
         this._circuitBreakerOpenedAt = now;
-        if (process.env.NODE_ENV !== 'test') {
-          // eslint-disable-next-line no-console
-          console.error('Circuit breaker opened - Redis failing', {
+        if (this.logger) {
+          this.logger.error('Circuit breaker opened - Redis failing', undefined, {
             key: this.key,
             correlationId: this.correlationId,
             failures: this._circuitBreakerFailures,
-            timestamp: new Date().toISOString(),
+            circuitBreakerState: this._circuitBreakerState,
           });
         }
       }
@@ -125,12 +133,11 @@ export class SimpleLock implements Lock {
       now - this._circuitBreakerOpenedAt > this._circuitBreakerTimeout
     ) {
       this._circuitBreakerState = 'half-open';
-      if (process.env.NODE_ENV !== 'test') {
-        // eslint-disable-next-line no-console
-        console.log('Circuit breaker half-open - testing Redis', {
+      if (this.logger) {
+        this.logger.info('Circuit breaker half-open - testing Redis', {
           key: this.key,
           correlationId: this.correlationId,
-          timestamp: new Date().toISOString(),
+          circuitBreakerState: this._circuitBreakerState,
         });
       }
     }
@@ -159,25 +166,22 @@ export class SimpleLock implements Lock {
       this.updateCircuitBreaker(true);
       if (!this._isHealthy) {
         this._isHealthy = true;
-        if (process.env.NODE_ENV !== 'test') {
-          // eslint-disable-next-line no-console
-          console.log('Redis connection recovered', {
+        if (this.logger) {
+          this.logger.info('Redis connection recovered', {
             key: this.key,
             correlationId: this.correlationId,
-            timestamp: new Date().toISOString(),
+            healthStatus: 'recovered',
           });
         }
       }
     } catch (error) {
       this._isHealthy = false;
       this.updateCircuitBreaker(false);
-      if (process.env.NODE_ENV !== 'test') {
-        // eslint-disable-next-line no-console
-        console.error('Redis health check failed', {
+      if (this.logger) {
+        this.logger.error('Redis health check failed', error as Error, {
           key: this.key,
           correlationId: this.correlationId,
-          error: (error as Error).message,
-          timestamp: new Date().toISOString(),
+          healthStatus: 'failed',
         });
       }
     }
@@ -207,7 +211,7 @@ export class SimpleLock implements Lock {
 
         this.updateCircuitBreaker(true);
 
-        if (result === 'OK') {
+        if (result === REDIS_OK_RESPONSE) {
           const acquisitionTime = Date.now() - startTime;
           const acquiredAt = Date.now();
 
@@ -238,15 +242,14 @@ export class SimpleLock implements Lock {
         this.updateCircuitBreaker(false);
 
         if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {
-          // eslint-disable-next-line no-console
-          console.error('Redis connection failed for lock', {
-            key: this.key,
-            correlationId: this.correlationId,
-            attempt: attempt + 1,
-            error: error.message,
-            circuitBreaker: this._circuitBreakerState,
-            timestamp: new Date().toISOString(),
-          });
+          if (this.logger) {
+            this.logger.error('Redis connection failed for lock', error, {
+              key: this.key,
+              correlationId: this.correlationId,
+              attempt: attempt + 1,
+              circuitBreaker: this._circuitBreakerState,
+            });
+          }
         }
       }
 
@@ -352,7 +355,7 @@ export class SimpleLock implements Lock {
   /**
    * Get the underlying Redis adapter (for advanced usage)
    */
-  getAdapter(): RedisAdapter {
+  getAdapter(): RedisAdapter | null {
     return this.adapter;
   }
 
@@ -379,5 +382,22 @@ export class SimpleLock implements Lock {
         openedAt: this._circuitBreakerOpenedAt,
       },
     };
+  }
+
+  /**
+   * Execute a routine with automatic lock management and extension
+   * Auto-extends when remaining TTL < 20% (extends at ~80% consumed)
+   * Provides AbortSignal when extension fails
+   *
+   * @param routine - Function to execute while holding the lock
+   * @returns Result of the routine
+   */
+  async using<T>(routine: (signal: ExtendedAbortSignal) => Promise<T>): Promise<T> {
+    const handle = await this.acquire();
+    if (this.logger) {
+      return executeWithSingleLockExtension(this, handle, this.ttl, routine, this.logger);
+    } else {
+      return executeWithSingleLockExtension(this, handle, this.ttl, routine);
+    }
   }
 }

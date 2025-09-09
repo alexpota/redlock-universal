@@ -28,50 +28,85 @@ This directory contains practical examples demonstrating how to use redlock-univ
 
 ## Examples
 
-### 1. Simple Lock (`simple-lock.ts`)
+### Real-World Implementation Patterns
 
-Basic single-instance locking example.
+#### 1. Database Transactions (`database-transactions.ts`)
+
+Protecting critical database operations from concurrent modifications.
 
 ```bash
-npx tsx examples/simple-lock.ts
+npx tsx examples/database-transactions.ts
 ```
 
 **Demonstrates**:
-- Creating a simple lock with NodeRedisAdapter
-- Basic acquire/release pattern
-- Error handling
+- Account balance protection during transfers
+- Long-running validation with auto-extension
+- Business logic error handling
+- Signal monitoring for lock failures
 
-### 2. Distributed Lock (`distributed-lock.ts`)
+#### 2. Distributed Cache Warming (`cache-warming.ts`)
+
+Coordinated cache warming across multiple Redis instances.
+
+```bash
+npx tsx examples/cache-warming.ts
+```
+
+**Demonstrates**:
+- Distributed lock coordination with quorum
+- Long-running operations with auto-extension
+- Graceful handling of quorum loss
+- Progress tracking across multiple data sources
+
+**Requirements**: Multiple Redis instances on ports 6379, 6380, 6381
+
+#### 3. Job Processing (`job-processing.ts`)
+
+Background job processing with progress tracking and cancellation.
+
+```bash
+npx tsx examples/job-processing.ts
+```
+
+**Demonstrates**:
+- Lock-protected job processing
+- Progress tracking and error recovery
+- Graceful cancellation handling
+- Performance monitoring and statistics
+
+### Core Usage Patterns
+
+#### 4. Simple Lock Usage (`simple-lock-usage.ts`)
+
+Basic single-instance locking patterns.
+
+```bash
+npx tsx examples/simple-lock-usage.ts
+```
+
+**Demonstrates**:
+- Creating locks with NodeRedisAdapter
+- Basic acquire/release patterns
+- Error handling strategies
+
+#### 5. Distributed Lock (RedLock) (`redlock-usage.ts`)
 
 Multi-instance distributed locking using the Redlock algorithm.
 
 ```bash
-npx tsx examples/distributed-lock.ts
+npx tsx examples/redlock-usage.ts
 ```
 
 **Demonstrates**:
 - Creating distributed locks across multiple Redis instances
-- Quorum-based consensus
-- Handling partial failures
+- Quorum-based consensus mechanisms
+- Handling partial failures gracefully
 
 **Requirements**: Multiple Redis instances running
 
-### 3. Lock with Retry (`lock-with-retry.ts`)
+#### 6. Lock Extension Patterns (`lock-extension.ts`)
 
-Handling contested resources with retry logic.
-
-```bash
-npx tsx examples/lock-with-retry.ts
-```
-
-**Demonstrates**:
-- Configuring retry attempts and delays
-- Handling lock contention
-- Simulating multiple competing processes
-
-### 4. Lock Extension (`lock-extension.ts`)
-
-Extending lock TTL for long-running operations.
+Manual extension strategies for long-running operations.
 
 ```bash
 npx tsx examples/lock-extension.ts
@@ -79,12 +114,25 @@ npx tsx examples/lock-extension.ts
 
 **Demonstrates**:
 - Manual lock extension during long operations
-- Automatic extension with timers
+- Extension timing strategies
 - Preventing lock expiration during work
 
-### 5. Monitoring (`monitoring.ts`)
+#### 7. Retry Strategies (`lock-with-retry.ts`)
 
-Using built-in monitoring and observability features.
+Handling contested resources with sophisticated retry logic.
+
+```bash
+npx tsx examples/lock-with-retry.ts
+```
+
+**Demonstrates**:
+- Configuring retry attempts and delays
+- Handling lock contention effectively
+- Simulating multiple competing processes
+
+#### 8. Monitoring & Observability (`monitoring.ts`)
+
+Production monitoring and observability features.
 
 ```bash
 npx tsx examples/monitoring.ts
@@ -93,8 +141,22 @@ npx tsx examples/monitoring.ts
 **Demonstrates**:
 - Metrics collection and analysis
 - Health checking for adapters
-- Structured logging
-- Performance monitoring
+- Structured logging integration
+- Performance monitoring techniques
+
+#### 9. Adapter Usage (`adapter-usage.ts`)
+
+Redis client integration patterns.
+
+```bash
+npx tsx examples/adapter-usage.ts
+```
+
+**Demonstrates**:
+- NodeRedisAdapter configuration
+- IoredisAdapter usage patterns
+- Client connection management
+- Adapter-specific optimizations
 
 ## Running Examples
 
