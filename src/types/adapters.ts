@@ -2,6 +2,20 @@
  * Redis adapter types for universal client support
  */
 
+import type { Logger } from '../monitoring/Logger.js';
+
+/**
+ * Result of atomic lock extension operation
+ */
+export interface AtomicExtensionResult {
+  /** Result code: 1=success, 0=too_late, -1=value_mismatch/key_missing */
+  readonly resultCode: 1 | 0 | -1;
+  /** Actual TTL at time of check (ms, -2 if key doesn't exist) */
+  readonly actualTTL: number;
+  /** Human-readable result message */
+  readonly message: string;
+}
+
 /**
  * Configuration options for Redis adapters
  */
@@ -14,6 +28,8 @@ export interface RedisAdapterOptions {
   readonly retryDelay?: number;
   /** Timeout for Redis operations in milliseconds */
   readonly timeout?: number;
+  /** Optional logger for structured logging (default: none) */
+  readonly logger?: Logger;
 }
 
 /**
@@ -60,6 +76,21 @@ export interface RedisAdapter {
    * @returns Promise resolving to true if extended, false otherwise
    */
   extendIfMatch(key: string, value: string, ttl: number): Promise<boolean>;
+
+  /**
+   * Atomic extension with TTL feedback and race condition protection
+   * @param key - Redis key
+   * @param value - Expected value
+   * @param minTTL - Minimum TTL required for extension (race condition protection)
+   * @param newTTL - New TTL to set in milliseconds
+   * @returns Promise resolving to atomic extension result with TTL feedback
+   */
+  atomicExtend(
+    key: string,
+    value: string,
+    minTTL: number,
+    newTTL: number
+  ): Promise<AtomicExtensionResult>;
 
   /**
    * Ping Redis server

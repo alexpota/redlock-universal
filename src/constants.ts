@@ -32,6 +32,15 @@ export const DEFAULTS = {
 
   /** Circuit breaker timeout in milliseconds (1 minute) */
   CIRCUIT_BREAKER_TIMEOUT: 60_000,
+
+  /** Auto-extension threshold ratio (extend when 80% of TTL consumed) */
+  AUTO_EXTENSION_THRESHOLD_RATIO: 0.2,
+
+  /** Minimum extension interval in milliseconds */
+  MIN_EXTENSION_INTERVAL: 1_000,
+
+  /** Safety buffer for atomic extension (minimum TTL required) */
+  ATOMIC_EXTENSION_SAFETY_BUFFER: 2000,
 } as const;
 
 /**

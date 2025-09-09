@@ -3,6 +3,7 @@
  */
 
 import type { RedisAdapter } from './adapters.js';
+import type { Logger } from '../monitoring/Logger.js';
 
 /**
  * Lock handle returned when a lock is successfully acquired
@@ -63,6 +64,9 @@ export interface SimpleLockConfig {
 
   /** Delay between retries in milliseconds (default: 100) */
   readonly retryDelay?: number;
+
+  /** Optional logger for structured logging (default: none) */
+  readonly logger?: Logger;
 }
 
 /**
@@ -89,6 +93,9 @@ export interface RedLockConfig {
 
   /** Clock drift factor (default: 0.01) */
   readonly clockDriftFactor?: number;
+
+  /** Optional logger for structured logging (default: none) */
+  readonly logger?: Logger;
 }
 
 /**
@@ -123,4 +130,10 @@ export interface Lock {
    * @returns Promise resolving to true if locked, false otherwise
    */
   isLocked(key: string): Promise<boolean>;
+
+  /**
+   * Get the underlying Redis adapter for atomic operations
+   * @returns Redis adapter instance or null if not applicable (e.g., for RedLock with multiple adapters)
+   */
+  getAdapter(): RedisAdapter | null;
 }
