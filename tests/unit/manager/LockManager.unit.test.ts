@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LockManager } from '../../../src/manager/LockManager.js';
-import type { RedisAdapter } from '../../../src/types/adapters.js';
+import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -59,6 +59,31 @@ class MockRedisAdapter implements RedisAdapter {
 
     this.storage.set(key, { value, expiry: Date.now() + ttl });
     return true;
+  }
+
+  async atomicExtend(
+    key: string,
+    value: string,
+    minTTL: number,
+    newTTL: number
+  ): Promise<AtomicExtensionResult> {
+    const item = this.storage.get(key);
+
+    if (!item) {
+      return { resultCode: -1, actualTTL: -2, message: 'Key does not exist' };
+    }
+
+    if (item.value !== value) {
+      return { resultCode: -1, actualTTL: 0, message: 'Value mismatch' };
+    }
+
+    const remainingTTL = item.expiry - Date.now();
+    if (remainingTTL < minTTL) {
+      return { resultCode: 0, actualTTL: remainingTTL, message: 'TTL too low' };
+    }
+
+    this.storage.set(key, { value, expiry: Date.now() + newTTL });
+    return { resultCode: 1, actualTTL: remainingTTL, message: 'Extended successfully' };
   }
 
   async disconnect(): Promise<void> {

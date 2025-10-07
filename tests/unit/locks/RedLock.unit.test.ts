@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
-import type { RedisAdapter } from '../../../src/types/adapters.js';
+import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 import type { RedLockConfig } from '../../../src/types/locks.js';
 import {
   generateTestKey,
@@ -86,6 +86,27 @@ class MockRedisAdapter implements RedisAdapter {
       return true;
     }
     return false;
+  }
+
+  async atomicExtend(
+    key: string,
+    value: string,
+    minTTL: number,
+    newTTL: number
+  ): Promise<AtomicExtensionResult> {
+    const currentValue = this.storage.get(key);
+
+    if (!currentValue) {
+      return { resultCode: -1, actualTTL: -2, message: 'Key does not exist' };
+    }
+
+    if (currentValue !== value) {
+      return { resultCode: -1, actualTTL: 0, message: 'Value mismatch' };
+    }
+
+    // Mock: assume we always have enough TTL for testing
+    setTimeout(() => this.storage.delete(key), newTTL);
+    return { resultCode: 1, actualTTL: newTTL, message: 'Extended successfully' };
   }
 
   async ping(): Promise<string> {

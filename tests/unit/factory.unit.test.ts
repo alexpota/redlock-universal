@@ -12,7 +12,7 @@ import { SimpleLock } from '../../src/locks/SimpleLock.js';
 import { LeanSimpleLock } from '../../src/locks/LeanSimpleLock.js';
 import { RedLock } from '../../src/locks/RedLock.js';
 import { ConfigurationError } from '../../src/types/errors.js';
-import type { RedisAdapter } from '../../src/types/adapters.js';
+import type { RedisAdapter, AtomicExtensionResult } from '../../src/types/adapters.js';
 
 describe('Factory Functions', () => {
   let mockAdapter: RedisAdapter;
@@ -22,10 +22,17 @@ describe('Factory Functions', () => {
       setNX: vi.fn(),
       del: vi.fn(),
       get: vi.fn(),
-      set: vi.fn(),
-      eval: vi.fn(),
+      delIfMatch: vi.fn(),
+      extendIfMatch: vi.fn(),
+      atomicExtend: vi.fn().mockResolvedValue({
+        resultCode: 1,
+        actualTTL: 5000,
+        message: 'Extended successfully',
+      } as AtomicExtensionResult),
       ping: vi.fn(),
-    } as RedisAdapter;
+      isConnected: vi.fn().mockReturnValue(true),
+      disconnect: vi.fn(),
+    };
   });
 
   describe('createLock', () => {

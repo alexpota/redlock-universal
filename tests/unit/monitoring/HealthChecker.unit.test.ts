@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HealthChecker } from '../../../src/monitoring/HealthChecker.js';
-import type { RedisAdapter } from '../../../src/types/adapters.js';
+import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 
 describe('HealthChecker', () => {
   let healthChecker: HealthChecker;
@@ -16,10 +16,15 @@ describe('HealthChecker', () => {
       get: vi.fn(),
       delIfMatch: vi.fn(),
       extendIfMatch: vi.fn(),
+      atomicExtend: vi.fn().mockResolvedValue({
+        resultCode: 1,
+        actualTTL: 5000,
+        message: 'Extended successfully',
+      } as AtomicExtensionResult),
       ping: vi.fn(),
       isConnected: vi.fn(),
       disconnect: vi.fn(),
-    } as RedisAdapter;
+    };
   });
 
   describe('registerAdapter', () => {
@@ -131,6 +136,11 @@ describe('HealthChecker', () => {
         get: vi.fn(),
         delIfMatch: vi.fn(),
         extendIfMatch: vi.fn(),
+        atomicExtend: vi.fn().mockResolvedValue({
+          resultCode: 1,
+          actualTTL: 5000,
+          message: 'Extended successfully',
+        } as AtomicExtensionResult),
         ping: vi.fn(),
         isConnected: vi.fn(),
         disconnect: vi.fn(),

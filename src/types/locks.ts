@@ -136,4 +136,14 @@ export interface Lock {
    * @returns Redis adapter instance or null if not applicable (e.g., for RedLock with multiple adapters)
    */
   getAdapter(): RedisAdapter | null;
+
+  /**
+   * Execute a routine with automatic lock management and extension
+   * Auto-extends when remaining TTL < 20% (extends at ~80% consumed)
+   * Provides AbortSignal when extension fails
+   *
+   * @param routine - Function to execute while holding the lock
+   * @returns Promise resolving to the routine result
+   */
+  using<T>(routine: (signal: AbortSignal) => Promise<T>): Promise<T>;
 }
