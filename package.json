@@ -16,7 +16,14 @@
     "typescript",
     "production",
     "clustering",
-    "synchronization"
+    "synchronization",
+    "distributed-lock",
+    "redis-lock",
+    "async-lock",
+    "concurrency-control",
+    "rate-limiting",
+    "job-queue",
+    "multi-instance"
   ],
   "author": "Alex Potapenko <alex.potapenko.dev@gmail.com>",
   "license": "MIT",
