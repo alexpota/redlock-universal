@@ -5,6 +5,10 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
+import {
+  executeWithSingleLockExtension,
+  type ExtendedAbortSignal,
+} from '../utils/auto-extension.js';
 import { DEFAULTS } from '../constants.js';
 
 // Redis response constants
@@ -121,5 +125,18 @@ export class LeanSimpleLock implements Lock {
    */
   getAdapter(): RedisAdapter {
     return this.a;
+  }
+
+  /**
+   * Execute a routine with automatic lock management and extension
+   * Auto-extends when remaining TTL < 20% (extends at ~80% consumed)
+   * Provides AbortSignal when extension fails
+   *
+   * @param routine - Function to execute while holding the lock
+   * @returns Result of the routine
+   */
+  async using<T>(routine: (signal: ExtendedAbortSignal) => Promise<T>): Promise<T> {
+    const handle = await this.acquire();
+    return executeWithSingleLockExtension(this, handle, this.t, routine);
   }
 }

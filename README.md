@@ -267,7 +267,7 @@ const logger = new Logger({
   maxEntries: 1000, // Limit memory usage
 });
 
-// Use with SimpleLock
+// Single-instance lock with logger
 const lock = createLock({
   adapter: new NodeRedisAdapter(client),
   key: 'resource',
@@ -275,7 +275,7 @@ const lock = createLock({
   logger, // Enhanced monitoring and error reporting
 });
 
-// Use with RedLock
+// Distributed lock with logger
 const redlock = createRedlock({
   adapters: [adapter1, adapter2, adapter3],
   key: 'distributed-resource',

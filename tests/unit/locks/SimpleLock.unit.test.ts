@@ -5,7 +5,7 @@ import {
   LockReleaseError,
   LockExtensionError,
 } from '../../../src/types/errors.js';
-import type { RedisAdapter } from '../../../src/types/adapters.js';
+import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 import { TEST_CONFIG } from '../../shared/constants.js';
 
 describe('SimpleLock Unit Tests', () => {
@@ -20,6 +20,11 @@ describe('SimpleLock Unit Tests', () => {
       del: vi.fn(),
       delIfMatch: vi.fn(),
       extendIfMatch: vi.fn(),
+      atomicExtend: vi.fn().mockResolvedValue({
+        resultCode: 1,
+        actualTTL: 5000,
+        message: 'Extended successfully',
+      } as AtomicExtensionResult),
       ping: vi.fn(),
       isConnected: vi.fn().mockReturnValue(true),
       disconnect: vi.fn(),

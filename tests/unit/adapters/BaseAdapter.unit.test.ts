@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BaseAdapter } from '../../../src/adapters/BaseAdapter.js';
-import type { RedisAdapterOptions } from '../../../src/types/adapters.js';
+import type { RedisAdapterOptions, AtomicExtensionResult } from '../../../src/types/adapters.js';
 
 // Concrete implementation for testing
 class TestAdapter extends BaseAdapter {
@@ -22,6 +22,9 @@ class TestAdapter extends BaseAdapter {
   }
   async extendIfMatch(): Promise<boolean> {
     return false;
+  }
+  async atomicExtend(): Promise<AtomicExtensionResult> {
+    return { resultCode: 1, actualTTL: 5000, message: 'Extended successfully' };
   }
   async ping(): Promise<string> {
     return 'PONG';
