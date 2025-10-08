@@ -12,6 +12,7 @@ import {
   IoredisAdapter,
   LockAcquisitionError,
   type LockHandle,
+  type Lock,
   RedLock,
 } from '../src/index.js';
 
@@ -159,29 +160,29 @@ async function multipleResourcesExample() {
     );
 
     console.log('Acquiring locks for multiple resources...');
-    const handles: LockHandle[] = [];
+    const acquiredLocks: Array<{ lock: Lock; handle: LockHandle }> = [];
 
     // Acquire all locks
-    for (let i = 0; i < redlocks.length; i++) {
+    for (const redlock of redlocks) {
       try {
-        const handle = await redlocks[i].acquire();
-        handles.push(handle);
+        const handle = await redlock.acquire();
+        acquiredLocks.push({ lock: redlock, handle });
         console.log(`✅ Acquired lock for: ${handle.key}`);
       } catch (error) {
-        console.error(`❌ Failed to acquire lock for resource ${i}:`, error);
+        console.error(`❌ Failed to acquire lock:`, error);
       }
     }
 
-    console.log(`Successfully acquired ${handles.length} out of ${redlocks.length} locks`);
+    console.log(`Successfully acquired ${acquiredLocks.length} out of ${redlocks.length} locks`);
 
     // Simulate concurrent work on multiple resources
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Release all locks
     console.log('Releasing all locks...');
-    for (let i = 0; i < handles.length; i++) {
-      const released = await redlocks[i].release(handles[i]);
-      console.log(`✅ Released lock for ${handles[i].key}: ${released}`);
+    for (const { lock, handle } of acquiredLocks) {
+      const released = await lock.release(handle);
+      console.log(`✅ Released lock for ${handle.key}: ${released}`);
     }
   } catch (error) {
     console.error('❌ Error:', error);

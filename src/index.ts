@@ -41,7 +41,10 @@ export {
   createLockValueWithMetadata,
   parseLockValue,
   isValidLockValue,
+  executeWithAutoExtension,
+  executeWithSingleLockExtension,
 } from './utils/index.js';
+export type { AutoExtensionConfig, ExtendedAbortSignal } from './utils/index.js';
 
 export {
   RedlockError,
