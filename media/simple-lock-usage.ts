@@ -31,7 +31,7 @@ async function basicLockExample() {
     const released = await lock.release(handle);
     console.log('Lock released:', released);
   } catch (error) {
-    console.error('Lock operation failed:', error.message);
+    console.error('Lock operation failed:', error instanceof Error ? error.message : String(error));
   } finally {
     await client.disconnect();
   }
@@ -58,7 +58,10 @@ async function retryLockExample() {
 
     await lock.release(handle);
   } catch (error) {
-    console.error('Could not acquire lock after retries:', error.message);
+    console.error(
+      'Could not acquire lock after retries:',
+      error instanceof Error ? error.message : String(error)
+    );
   } finally {
     client.disconnect();
   }
@@ -90,7 +93,7 @@ async function lockExtensionExample() {
     await workPromise;
     await lock.release(handle);
   } catch (error) {
-    console.error('Lock operation failed:', error.message);
+    console.error('Lock operation failed:', error instanceof Error ? error.message : String(error));
   } finally {
     await client.disconnect();
   }
@@ -141,14 +144,20 @@ async function errorHandlingExample() {
       // Simulated work that might fail
       await riskyWork();
     } catch (workError) {
-      console.error('Work failed:', workError.message);
+      console.error(
+        'Work failed:',
+        workError instanceof Error ? workError.message : String(workError)
+      );
       // Still need to release the lock
     } finally {
       // Always release in finally block
       await lock.release(handle);
     }
   } catch (lockError) {
-    console.error('Failed to acquire lock:', lockError.message);
+    console.error(
+      'Failed to acquire lock:',
+      lockError instanceof Error ? lockError.message : String(lockError)
+    );
   } finally {
     await client.disconnect();
   }
@@ -186,7 +195,10 @@ async function multipleLockExample() {
     await accountLock.release(accountHandle);
     await userLock.release(userHandle);
   } catch (error) {
-    console.error('Multi-lock operation failed:', error.message);
+    console.error(
+      'Multi-lock operation failed:',
+      error instanceof Error ? error.message : String(error)
+    );
   } finally {
     await client.disconnect();
   }
@@ -219,7 +231,7 @@ async function asyncPatternExample() {
 
     console.log('Calculation result:', result);
   } catch (error) {
-    console.error('Operation failed:', error.message);
+    console.error('Operation failed:', error instanceof Error ? error.message : String(error));
   } finally {
     client.disconnect();
   }

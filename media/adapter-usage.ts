@@ -85,7 +85,7 @@ async function errorHandlingExample() {
     // Adapter should handle Redis errors gracefully
     await adapter.setNX('key', 'value', -1); // Invalid TTL
   } catch (error) {
-    console.log('Validation error caught:', error.message);
+    console.log('Validation error caught:', error instanceof Error ? error.message : String(error));
   }
 
   try {
@@ -93,7 +93,7 @@ async function errorHandlingExample() {
     client.disconnect();
     await adapter.get('key');
   } catch (error) {
-    console.log('Connection error caught:', error.message);
+    console.log('Connection error caught:', error instanceof Error ? error.message : String(error));
   }
 }
 
