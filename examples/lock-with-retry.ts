@@ -28,7 +28,7 @@ async function retryExample() {
     const acquisitionTime = Date.now() - startTime;
     
     console.log(`Lock acquired after ${acquisitionTime}ms!`);
-    console.log(`Attempts: ${handle.metadata.attempts}`);
+    console.log(`Attempts: ${handle.metadata?.attempts ?? 1}`);
 
     // Simulate work
     console.log('Working with contested resource...');

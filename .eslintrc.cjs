@@ -4,10 +4,7 @@ module.exports = {
     node: true,
     es2022: true,
   },
-  extends: [
-    'eslint:recommended',
-    'prettier',
-  ],
+  extends: ['eslint:recommended', 'prettier'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,
@@ -18,37 +15,45 @@ module.exports = {
   rules: {
     // Prettier integration
     'prettier/prettier': 'error',
-    
+
     // Basic TypeScript
-    '@typescript-eslint/no-unused-vars': 'error',
+    'no-unused-vars': 'off', // Disable base rule (use TypeScript version instead)
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
     '@typescript-eslint/no-explicit-any': 'error',
-    
+
     // Performance and best practices
     'prefer-const': 'error',
     'no-var': 'error',
     'object-shorthand': 'error',
     'prefer-arrow-callback': 'error',
     'prefer-template': 'error',
-    
+
     // Security
     'no-eval': 'error',
     'no-implied-eval': 'error',
     'no-new-func': 'error',
-    
+
     // Error prevention
     'no-console': 'warn',
     'no-debugger': 'error',
     'no-alert': 'error',
-    
+
     // Import/Export
     'no-duplicate-imports': 'error',
-    
+
     // Deprecated methods and APIs
     'deprecation/deprecation': 'error',
-    
+
     // String methods
     '@typescript-eslint/prefer-string-starts-ends-with': 'error',
-    
+
     // Code quality and duplication detection
     'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
     'sonarjs/no-duplicated-branches': 'error',

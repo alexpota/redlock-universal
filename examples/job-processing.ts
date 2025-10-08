@@ -64,7 +64,6 @@ async function jobProcessingWithProgress() {
   const client = new Redis({
     host: 'localhost',
     port: 6379,
-    retryDelayOnFailover: 100,
     maxRetriesPerRequest: 3,
   });
 
@@ -92,7 +91,7 @@ async function jobProcessingWithProgress() {
 
       console.log(`🚀 Starting job processing: ${items.length} items to process`);
 
-      for (const [index, item] of items.entries()) {
+      for (const [_index, item] of items.entries()) {
         jobProgress.currentItem = item.id;
 
         try {

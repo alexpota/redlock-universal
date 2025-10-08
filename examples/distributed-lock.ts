@@ -33,7 +33,7 @@ async function distributedExample() {
     console.log('Attempting to acquire distributed lock...');
     const handle = await redlock.acquire();
     console.log('Distributed lock acquired successfully!');
-    console.log(`Locked nodes: ${handle.metadata.nodes.length}`);
+    console.log(`Locked nodes: ${handle.metadata?.nodes?.length ?? 0}`);
 
     // Simulate payment processing
     console.log('Processing payment...');

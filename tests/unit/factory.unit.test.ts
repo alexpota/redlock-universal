@@ -100,7 +100,7 @@ describe('Factory Functions', () => {
     it('should throw error when adapter is missing', () => {
       const config = {
         key: 'test-key',
-      } as CreateLockConfig;
+      } as any;
 
       expect(() => createLock(config)).toThrow(ConfigurationError);
       expect(() => createLock(config)).toThrow('Redis adapter is required');
@@ -109,7 +109,7 @@ describe('Factory Functions', () => {
     it('should throw error when key is missing', () => {
       const config = {
         adapter: mockAdapter,
-      } as CreateLockConfig;
+      } as any;
 
       expect(() => createLock(config)).toThrow(ConfigurationError);
       expect(() => createLock(config)).toThrow('Lock key is required');
@@ -275,7 +275,7 @@ describe('Factory Functions', () => {
     it('should throw error when adapters is missing', () => {
       const config = {
         key: 'test-key',
-      } as CreateRedlockConfig;
+      } as any;
 
       expect(() => createRedlock(config)).toThrow(ConfigurationError);
       expect(() => createRedlock(config)).toThrow(
@@ -286,7 +286,7 @@ describe('Factory Functions', () => {
     it('should throw error when key is missing', () => {
       const config = {
         adapters: mockAdapters,
-      } as CreateRedlockConfig;
+      } as any;
 
       expect(() => createRedlock(config)).toThrow(ConfigurationError);
       expect(() => createRedlock(config)).toThrow('Lock key is required');
