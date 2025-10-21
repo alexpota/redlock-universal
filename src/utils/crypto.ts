@@ -1,11 +1,19 @@
-import { randomBytes, timingSafeEqual } from 'crypto';
+import { randomFillSync, timingSafeEqual } from 'crypto';
+
+/**
+ * Buffer pool for crypto operations to reduce allocations
+ * Reuses pre-allocated buffers with fresh random data on each call
+ */
+const LOCK_VALUE_BUFFER = Buffer.allocUnsafe(16);
+const LOCK_ID_BUFFER = Buffer.allocUnsafe(6);
 
 /**
  * Generate a cryptographically secure random lock value
- * Uses Node.js crypto.randomBytes for security
+ * Uses buffer pool with randomFillSync for zero-allocation crypto
  */
 export function generateLockValue(): string {
-  return randomBytes(16).toString('hex');
+  randomFillSync(LOCK_VALUE_BUFFER);
+  return LOCK_VALUE_BUFFER.toString('hex');
 }
 
 /**
@@ -14,32 +22,52 @@ export function generateLockValue(): string {
  */
 export function generateLockId(): string {
   const timestamp = Date.now();
-  const random = randomBytes(6).toString('hex');
+  randomFillSync(LOCK_ID_BUFFER);
+  const random = LOCK_ID_BUFFER.toString('hex');
   return `${timestamp}-${random}`;
 }
 
 /**
+ * Buffer pool for safe comparison (max lock value length is 256 chars)
+ */
+const COMPARE_BUFFER_A = Buffer.allocUnsafe(256);
+const COMPARE_BUFFER_B = Buffer.allocUnsafe(256);
+
+/**
  * Compare two strings using timing-safe comparison
  * Prevents timing attacks on lock value verification
+ * Uses buffer pool to reduce allocations
  */
 export function safeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false;
   }
 
-  const bufferA = Buffer.from(a, 'utf8');
-  const bufferB = Buffer.from(b, 'utf8');
+  const len = a.length;
+  if (len > 256) {
+    return false;
+  }
 
-  return timingSafeEqual(bufferA, bufferB);
+  COMPARE_BUFFER_A.write(a, 0, len, 'utf8');
+  COMPARE_BUFFER_B.write(b, 0, len, 'utf8');
+
+  return timingSafeEqual(COMPARE_BUFFER_A.subarray(0, len), COMPARE_BUFFER_B.subarray(0, len));
 }
+
+/**
+ * Buffer pool for metadata lock values
+ */
+const METADATA_LOCK_VALUE_BUFFER = Buffer.allocUnsafe(8);
 
 /**
  * Create a lock value with embedded metadata
  * Format: nodeId:timestamp:random
+ * Uses buffer pool to reduce allocations
  */
 export function createLockValueWithMetadata(nodeId?: string): string {
   const timestamp = Date.now();
-  const random = randomBytes(8).toString('hex');
+  randomFillSync(METADATA_LOCK_VALUE_BUFFER);
+  const random = METADATA_LOCK_VALUE_BUFFER.toString('hex');
   const node = nodeId || 'node';
 
   return `${node}:${timestamp}:${random}`;

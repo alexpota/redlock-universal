@@ -28,6 +28,13 @@ export interface LoggerConfig {
 export class Logger {
   private readonly config: Required<LoggerConfig>;
   private readonly entries: LogEntry[] = [];
+  private _reusableEntry: {
+    level?: LogLevel;
+    message?: string;
+    timestamp?: number;
+    context?: Record<string, unknown>;
+    error?: Error;
+  } = {};
 
   constructor(config: Partial<LoggerConfig> = {}) {
     this.config = {
@@ -125,21 +132,33 @@ export class Logger {
       return;
     }
 
-    const entry: LogEntry = {
-      level,
-      message,
-      timestamp: Date.now(),
-      ...(context && { context }),
-      ...(error && { error }),
-    };
+    const timestamp = Date.now();
 
-    // Console output
+    // Console output (uses reusable entry to avoid allocation)
     if (this.config.enableConsole) {
-      this.writeToConsole(entry);
+      this._reusableEntry.level = level;
+      this._reusableEntry.message = message;
+      this._reusableEntry.timestamp = timestamp;
+      if (context !== undefined) {
+        this._reusableEntry.context = context;
+      }
+      if (error !== undefined) {
+        this._reusableEntry.error = error;
+      }
+
+      this.writeToConsole(this._reusableEntry as LogEntry);
     }
 
-    // Collection
+    // Collection (create new entry only if needed)
     if (this.config.enableCollection) {
+      const entry: LogEntry = {
+        level,
+        message,
+        timestamp,
+        ...(context && { context }),
+        ...(error && { error }),
+      };
+
       this.entries.push(entry);
 
       // Maintain max entries limit

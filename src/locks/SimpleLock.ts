@@ -144,13 +144,6 @@ export class SimpleLock implements Lock {
   }
 
   /**
-   * Check if circuit breaker allows operation
-   */
-  private isCircuitBreakerOpen(): boolean {
-    return this._circuitBreakerState === 'open';
-  }
-
-  /**
    * Check Redis connection health periodically
    */
   private async checkConnectionHealth(): Promise<void> {
@@ -191,7 +184,7 @@ export class SimpleLock implements Lock {
    * Attempt to acquire the lock
    */
   async acquire(): Promise<LockHandle> {
-    if (this.isCircuitBreakerOpen()) {
+    if (this._circuitBreakerState === 'open') {
       throw new LockAcquisitionError(
         this.key,
         0,
