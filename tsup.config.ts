@@ -14,7 +14,7 @@ export default defineConfig({
   // Code generation
   target: 'es2022',
   minify: false, // Keep readable for debugging
-  sourcemap: true,
+  sourcemap: false,
 
   // TypeScript
   dts: true, // Generate .d.ts files

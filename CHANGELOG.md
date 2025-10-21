@@ -1,3 +1,12 @@
+## [0.6.4](https://github.com/alexpota/redlock-universal/compare/v0.6.3...v0.6.4) (2025-10-21)
+
+
+### Performance Improvements
+
+* remove sourcemaps from published package ([#44](https://github.com/alexpota/redlock-universal/issues/44))
+
+Reduces package size from 564 KB to 247 KB (-56%). Sourcemaps are development artifacts that bloat the published package unnecessarily. The unminified code remains fully readable for debugging purposes.
+
 # [0.5.0](https://github.com/alexpota/redlock-universal/compare/v0.4.1...v0.5.0) (2025-07-19)
 
 
