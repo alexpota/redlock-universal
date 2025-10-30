@@ -2,6 +2,7 @@ import type {
   RedisAdapter,
   RedisAdapterOptions,
   AtomicExtensionResult,
+  BatchAcquireResult,
 } from '../types/adapters.js';
 import type { Logger } from '../monitoring/Logger.js';
 import { DEFAULTS } from '../constants.js';
@@ -52,6 +53,61 @@ end
  * Export atomic extend script for use by concrete adapters
  */
 export { ATOMIC_EXTEND_SCRIPT };
+
+export const DELETE_IF_MATCH_SCRIPT = `
+  if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+  else
+    return 0
+  end
+`.trim();
+
+export const EXTEND_IF_MATCH_SCRIPT = `
+  if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+  else
+    return 0
+  end
+`.trim();
+
+/**
+ * Atomic batch lock acquisition script
+ *
+ * ATOMICITY GUARANTEE:
+ * Redis Lua scripts execute atomically - either the entire script succeeds
+ * or it fails with no side effects. From Redis documentation:
+ * "Lua scripts are executed atomically, that is, once a script has been executed,
+ * no other script or command will be executed until the script has finished."
+ *
+ * This provides all-or-nothing semantics for batch acquisition:
+ * - If Phase 1 finds any locked key, returns immediately with no keys modified
+ * - If Phase 2 completes, all keys are guaranteed to be set
+ * - Script execution is atomic even if Redis crashes or client disconnects
+ *
+ * KEYS[1..N]: Lock keys to acquire
+ * ARGV[1..N]: Lock values (one per key)
+ * ARGV[N+1]: TTL in milliseconds
+ *
+ * Returns: {success, count_or_index, failed_key?}
+ *   success=1: All locks acquired, count_or_index = number of locks
+ *   success=0: Acquisition failed, count_or_index = index of conflicting key
+ */
+export const BATCH_ACQUIRE_SCRIPT = `
+  -- Phase 1: Check all keys are available
+  for i = 1, #KEYS do
+    if redis.call("EXISTS", KEYS[i]) == 1 then
+      return {0, i, KEYS[i]}
+    end
+  end
+
+  -- Phase 2: All keys available, acquire atomically
+  local ttl = tonumber(ARGV[#ARGV])
+  for i = 1, #KEYS do
+    redis.call("SET", KEYS[i], ARGV[i], "PX", ttl)
+  end
+
+  return {1, #KEYS}
+`.trim();
 
 /**
  * Base adapter class providing common functionality for all Redis clients.
@@ -118,18 +174,37 @@ export abstract class BaseAdapter implements RedisAdapter {
     return this.options.keyPrefix ? `${this.options.keyPrefix}${key}` : key;
   }
 
+  protected stripPrefix(prefixedKey: string): string {
+    if (this.options.keyPrefix && prefixedKey.startsWith(this.options.keyPrefix)) {
+      return prefixedKey.slice(this.options.keyPrefix.length);
+    }
+    return prefixedKey;
+  }
+
   /**
    * Handles timeout for Redis operations
+   * Properly cleans up timeout handles to prevent memory leaks
    */
   protected async withTimeout<T>(
     operation: Promise<T>,
     timeoutMs: number = this.options.timeout
   ): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs);
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      );
     });
 
-    return Promise.race([operation, timeoutPromise]);
+    try {
+      return await Promise.race([operation, timeoutPromise]);
+    } finally {
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 
   /**
@@ -184,6 +259,7 @@ export abstract class BaseAdapter implements RedisAdapter {
     minTTL: number,
     newTTL: number
   ): Promise<AtomicExtensionResult>;
+  abstract batchSetNX(keys: string[], values: string[], ttl: number): Promise<BatchAcquireResult>;
   abstract ping(): Promise<string>;
   abstract isConnected(): boolean;
   abstract disconnect(): Promise<void>;

@@ -28,24 +28,6 @@ export interface CreateLockConfig {
  *
  * @param config - Lock configuration
  * @returns Lock instance
- *
- * @example
- * ```typescript
- * import { createLock, NodeRedisAdapter } from 'redlock-universal';
- *
- * const lock = createLock({
- *   adapter: new NodeRedisAdapter(redisClient),
- *   key: 'my-resource',
- *   ttl: 30000
- * });
- *
- * const handle = await lock.acquire();
- * try {
- *   // Critical section
- * } finally {
- *   await lock.release(handle);
- * }
- * ```
  */
 export function createLock(config: CreateLockConfig): Lock {
   if (!config) {
@@ -87,14 +69,6 @@ export function createLock(config: CreateLockConfig): Lock {
  * @param keys - Array of lock keys
  * @param options - Shared configuration options
  * @returns Array of lock instances
- *
- * @example
- * ```typescript
- * const locks = createLocks(adapter, ['user:123', 'account:456'], {
- *   ttl: 15000,
- *   retryAttempts: 5
- * });
- * ```
  */
 export function createLocks(
   adapter: RedisAdapter,
@@ -126,14 +100,6 @@ export function createLocks(
  * @param key - Base key name
  * @param options - Additional lock options
  * @returns Lock instance with prefixed key
- *
- * @example
- * ```typescript
- * const lock = createPrefixedLock(adapter, 'locks:', 'user-update', {
- *   ttl: 10000
- * });
- * // Creates lock with key "locks:user-update"
- * ```
  */
 export function createPrefixedLock(
   adapter: RedisAdapter,
@@ -177,29 +143,6 @@ export interface CreateRedlockConfig {
  *
  * @param config - RedLock configuration
  * @returns RedLock instance
- *
- * @example
- * ```typescript
- * import { createRedlock, NodeRedisAdapter } from 'redlock-universal';
- *
- * const redlock = createRedlock({
- *   adapters: [
- *     new NodeRedisAdapter(redis1),
- *     new NodeRedisAdapter(redis2),
- *     new NodeRedisAdapter(redis3)
- *   ],
- *   key: 'critical-resource',
- *   ttl: 30000,
- *   quorum: 2
- * });
- *
- * const handle = await redlock.acquire();
- * try {
- *   // Critical section with distributed guarantee
- * } finally {
- *   await redlock.release(handle);
- * }
- * ```
  */
 export function createRedlock(config: CreateRedlockConfig): Lock {
   if (!config) {
@@ -235,19 +178,6 @@ export function createRedlock(config: CreateRedlockConfig): Lock {
  * @param keys - Array of lock keys
  * @param options - Shared configuration options
  * @returns Array of RedLock instances
- *
- * @example
- * ```typescript
- * const redlocks = createRedlocks(
- *   [adapter1, adapter2, adapter3],
- *   ['resource1', 'resource2'],
- *   {
- *     ttl: 15000,
- *     quorum: 2,
- *     retryAttempts: 5
- *   }
- * );
- * ```
  */
 export function createRedlocks(
   adapters: readonly RedisAdapter[],

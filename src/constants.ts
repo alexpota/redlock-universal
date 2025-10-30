@@ -2,6 +2,8 @@
  * Library constants
  */
 
+import { DELETE_IF_MATCH_SCRIPT, EXTEND_IF_MATCH_SCRIPT } from './adapters/BaseAdapter.js';
+
 /**
  * Default configuration values
  */
@@ -41,29 +43,45 @@ export const DEFAULTS = {
 
   /** Safety buffer for atomic extension (minimum TTL required) */
   ATOMIC_EXTENSION_SAFETY_BUFFER: 2000,
+
+  /**
+   * Extension buffer ratio for single-node locks (10%)
+   *
+   * This ratio determines how much TTL must remain before atomic extension.
+   * For single-node locks, we use a larger buffer (10%) because:
+   * - Lower coordination overhead allows larger safety margin
+   * - Single point of failure means we can be more conservative
+   * - Network latency to one node is more predictable
+   *
+   * Example: For a 30-second TTL, extension triggers with 3 seconds remaining
+   */
+  SINGLE_NODE_EXTENSION_BUFFER_RATIO: 0.1,
+
+  /**
+   * Extension buffer ratio for distributed locks (5%)
+   *
+   * This ratio determines how much TTL must remain before atomic extension.
+   * For distributed locks (RedLock), we use a smaller buffer (5%) because:
+   * - Multiple nodes require more coordination time
+   * - Smaller ratio ensures we extend before ANY node expires
+   * - Clock drift across nodes necessitates earlier extension
+   * - Quorum-based approach means we need tighter timing
+   *
+   * Example: For a 30-second TTL, extension triggers with 1.5 seconds remaining
+   */
+  DISTRIBUTED_EXTENSION_BUFFER_RATIO: 0.05,
 } as const;
 
 /**
  * Lua scripts for atomic operations
+ * These scripts are re-exported from BaseAdapter for public API access
  */
 export const LUA_SCRIPTS = {
   /** Script to safely release a lock (check value before delete) */
-  RELEASE: `
-    if redis.call("GET", KEYS[1]) == ARGV[1] then
-      return redis.call("DEL", KEYS[1])
-    else
-      return 0
-    end
-  `.trim(),
+  RELEASE: DELETE_IF_MATCH_SCRIPT,
 
   /** Script to safely extend a lock (check value before extend) */
-  EXTEND: `
-    if redis.call("GET", KEYS[1]) == ARGV[1] then
-      return redis.call("PEXPIRE", KEYS[1], ARGV[2])
-    else
-      return 0
-    end
-  `.trim(),
+  EXTEND: EXTEND_IF_MATCH_SCRIPT,
 } as const;
 
 /**

@@ -1,8 +1,12 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { LockHandle } from '../types/locks.js';
+import type { Logger } from '../monitoring/Logger.js';
 import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
+import { generateLockValue, generateLockId } from '../utils/crypto.js';
+import { LockAcquisitionError } from '../types/errors.js';
+import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
 /**
  * Configuration for LockManager
@@ -16,6 +20,8 @@ export interface LockManagerConfig {
   readonly defaultRetryAttempts?: number;
   /** Default retry delay in milliseconds */
   readonly defaultRetryDelay?: number;
+  /** Optional logger for operational visibility */
+  readonly logger?: Logger;
   /** Monitoring configuration */
   readonly monitoring?: {
     readonly enabled?: boolean;
@@ -41,7 +47,9 @@ export interface LockStats {
  * Provides centralized management of locks with monitoring and health checks
  */
 export class LockManager {
-  private readonly config: Required<LockManagerConfig>;
+  private readonly config: Required<Omit<LockManagerConfig, 'logger'>> & {
+    readonly logger?: Logger;
+  };
   private readonly activeLocks = new Map<string, LockHandle>();
   private readonly stats = {
     totalLocks: 0,
@@ -53,7 +61,7 @@ export class LockManager {
   };
 
   constructor(config: LockManagerConfig) {
-    this.config = {
+    const baseConfig = {
       nodes: config.nodes,
       defaultTTL: config.defaultTTL ?? DEFAULTS.TTL,
       defaultRetryAttempts: config.defaultRetryAttempts ?? DEFAULTS.RETRY_ATTEMPTS,
@@ -64,6 +72,8 @@ export class LockManager {
         healthCheckInterval: config.monitoring?.healthCheckInterval ?? 30000,
       },
     };
+
+    this.config = config.logger ? { ...baseConfig, logger: config.logger } : baseConfig;
 
     this.validateConfig();
   }
@@ -195,6 +205,201 @@ export class LockManager {
         : this.createSimpleLock(handle.key);
 
     return lock.release(handle);
+  }
+
+  /**
+   * Acquire multiple locks atomically in a single Redis operation
+   *
+   * **IMPORTANT - Deadlock Prevention:**
+   * Keys are automatically sorted alphabetically before acquisition to prevent deadlocks.
+   * The returned lock handles will be in SORTED key order, NOT the original input order.
+   *
+   * **Atomicity Guarantee:**
+   * All locks are acquired atomically using a Lua script - either all succeed or none do.
+   * Redis guarantees that Lua scripts execute atomically without interruption.
+   *
+   * **Example:**
+   * ```typescript
+   * // Input: ['user:3', 'user:1', 'user:2']
+   * const handles = await manager.acquireBatch(['user:3', 'user:1', 'user:2']);
+   * // Returns handles in sorted order: ['user:1', 'user:2', 'user:3']
+   * ```
+   *
+   * @param keys - Array of lock keys to acquire (will be sorted internally)
+   * @param options - Acquisition options
+   * @param options.ttl - Lock time-to-live in milliseconds (defaults to manager's defaultTTL)
+   * @param options.nodeIndex - Redis node index to use (defaults to 0)
+   * @returns Promise resolving to array of lock handles in SORTED key order
+   * @throws {Error} If keys array is empty or contains duplicates
+   * @throws {LockAcquisitionError} If any key is already locked
+   */
+  async acquireBatch(
+    keys: string[],
+    options: {
+      readonly ttl?: number;
+      readonly nodeIndex?: number;
+    } = {}
+  ): Promise<LockHandle[]> {
+    if (keys.length === 0) {
+      throw new Error('At least one key is required for batch acquisition');
+    }
+
+    // Check for duplicate keys to prevent subtle bugs
+    const uniqueKeys = new Set(keys);
+    if (uniqueKeys.size !== keys.length) {
+      const duplicates = keys.filter((key, index) => keys.indexOf(key) !== index);
+      throw new Error(
+        `Duplicate keys detected in batch acquisition: ${[...new Set(duplicates)].join(', ')}`
+      );
+    }
+
+    const nodeIndex = options.nodeIndex ?? 0;
+
+    if (nodeIndex >= this.config.nodes.length) {
+      throw new Error(`Node index ${nodeIndex} is out of range`);
+    }
+
+    const adapter = this.config.nodes[nodeIndex]!;
+    const ttl = options.ttl ?? this.config.defaultTTL;
+    const startTime = Date.now();
+    const sortedKeys = [...keys].sort();
+    const values = sortedKeys.map(() => generateLockValue());
+
+    this.stats.totalLocks += sortedKeys.length;
+
+    if (this.config.logger) {
+      this.config.logger.info('Starting batch lock acquisition', {
+        keyCount: sortedKeys.length,
+        keys: sortedKeys.slice(0, 10), // Log first 10 to avoid huge logs
+        ttl,
+        nodeIndex,
+      });
+    }
+
+    try {
+      const result = await adapter.batchSetNX(sortedKeys, values, ttl);
+
+      if (!result.success) {
+        this.stats.failedLocks += sortedKeys.length;
+
+        if (this.config.logger) {
+          this.config.logger.error(
+            'Batch lock acquisition failed (atomic guarantee preserved)',
+            new Error('Lock acquisition failed'),
+            {
+              failedKey: result.failedKey,
+              failedIndex: result.failedIndex,
+              attemptedKeys: sortedKeys.length,
+              acquisitionTime: Date.now() - startTime,
+            }
+          );
+        }
+
+        throw new LockAcquisitionError(
+          result.failedKey,
+          1,
+          new Error(
+            `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
+          )
+        );
+      }
+
+      const acquisitionTime = Date.now() - startTime;
+
+      const handles: LockHandle[] = sortedKeys.map((key, index) => ({
+        id: generateLockId(),
+        key,
+        value: values[index]!,
+        acquiredAt: startTime,
+        ttl,
+        metadata: {
+          attempts: 1,
+          acquisitionTime,
+          strategy: 'simple' as const,
+        },
+      }));
+
+      this.stats.acquisitionTimes.push(acquisitionTime);
+      this.stats.acquiredLocks += handles.length;
+      this.stats.activeLocks += handles.length;
+
+      for (const handle of handles) {
+        this.activeLocks.set(handle.id, handle);
+      }
+
+      if (this.config.logger) {
+        this.config.logger.info('Batch lock acquisition succeeded', {
+          lockCount: handles.length,
+          acquisitionTime,
+          avgTimePerLock: acquisitionTime / handles.length,
+        });
+      }
+
+      return handles;
+    } catch (error) {
+      if (!(error instanceof LockAcquisitionError)) {
+        this.stats.failedLocks += sortedKeys.length;
+
+        if (this.config.logger && error instanceof Error) {
+          this.config.logger.error('Unexpected error during batch acquisition', error, {
+            keyCount: sortedKeys.length,
+          });
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Release multiple locks
+   *
+   * @param handles - Array of lock handles to release
+   * @returns Promise resolving to array of results (true if released, false if already expired)
+   */
+  async releaseBatch(handles: LockHandle[]): Promise<boolean[]> {
+    const releasePromises = handles.map(async handle => {
+      const holdTime = Date.now() - handle.acquiredAt;
+      this.stats.holdTimes.push(holdTime);
+
+      if (this.activeLocks.delete(handle.id)) {
+        this.stats.activeLocks--;
+      }
+
+      const lock = this.createSimpleLock(handle.key);
+      return lock.release(handle);
+    });
+
+    const results = await Promise.allSettled(releasePromises);
+    return results.map(result => (result.status === 'fulfilled' ? result.value : false));
+  }
+
+  /**
+   * Acquire and manage multiple locks with automatic extension
+   * Combines batch acquisition with auto-extension for long-running operations
+   *
+   * @param keys - Array of lock keys to acquire
+   * @param routine - Function to execute while holding all locks
+   * @param options - Lock configuration options
+   * @returns Promise resolving to the routine result
+   */
+  async usingBatch<T>(
+    keys: string[],
+    routine: (signal: ExtendedAbortSignal) => Promise<T>,
+    options: {
+      readonly ttl?: number;
+      readonly nodeIndex?: number;
+    } = {}
+  ): Promise<T> {
+    const handles = await this.acquireBatch(keys, options);
+    const ttl = options.ttl ?? this.config.defaultTTL;
+    const locks = handles.map(handle => this.createSimpleLock(handle.key));
+
+    return executeWithAutoExtension({
+      locks,
+      handles,
+      ttl,
+      routine,
+    });
   }
 
   /**
