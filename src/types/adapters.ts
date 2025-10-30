@@ -17,6 +17,35 @@ export interface AtomicExtensionResult {
 }
 
 /**
+ * Result of successful batch lock acquisition
+ */
+export interface BatchAcquireSuccess {
+  /** Acquisition succeeded */
+  readonly success: true;
+  /** Number of locks acquired (equals keys.length) */
+  readonly acquiredCount: number;
+}
+
+/**
+ * Result of failed batch lock acquisition
+ */
+export interface BatchAcquireFailure {
+  /** Acquisition failed */
+  readonly success: false;
+  /** Number of locks acquired (always 0 due to all-or-nothing semantics) */
+  readonly acquiredCount: 0;
+  /** Key that was already locked */
+  readonly failedKey: string;
+  /** 1-based index of the failed key */
+  readonly failedIndex: number;
+}
+
+/**
+ * Result of batch lock acquisition operation (discriminated union)
+ */
+export type BatchAcquireResult = BatchAcquireSuccess | BatchAcquireFailure;
+
+/**
  * Configuration options for Redis adapters
  */
 export interface RedisAdapterOptions {
@@ -91,6 +120,18 @@ export interface RedisAdapter {
     minTTL: number,
     newTTL: number
   ): Promise<AtomicExtensionResult>;
+
+  /**
+   * Atomically acquire multiple locks in a single operation
+   * All-or-nothing semantics: either all locks are acquired or none
+   *
+   * @param keys - Array of Redis keys to lock
+   * @param values - Array of values (one per key, same length as keys)
+   * @param ttl - Time to live in milliseconds for all locks
+   * @returns Promise resolving to batch acquisition result
+   * @throws Error if keys and values arrays have different lengths
+   */
+  batchSetNX(keys: string[], values: string[], ttl: number): Promise<BatchAcquireResult>;
 
   /**
    * Ping Redis server

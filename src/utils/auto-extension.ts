@@ -132,10 +132,11 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
 
         const adapter = lock.getAdapter?.();
         if (adapter && adapter.atomicExtend) {
-          // For distributed locks (multiple adapters), use a smaller safety buffer
-          // to account for cross-node coordination overhead
+          // Use appropriate buffer ratio based on lock distribution strategy
           const isDistributed = locks.length > 1;
-          const bufferRatio = isDistributed ? 0.05 : 0.1; // 5% for distributed, 10% for single
+          const bufferRatio = isDistributed
+            ? DEFAULTS.DISTRIBUTED_EXTENSION_BUFFER_RATIO
+            : DEFAULTS.SINGLE_NODE_EXTENSION_BUFFER_RATIO;
           const proportionalSafetyBuffer = Math.min(
             DEFAULTS.ATOMIC_EXTENSION_SAFETY_BUFFER,
             Math.floor(ttl * bufferRatio)

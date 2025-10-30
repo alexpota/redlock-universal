@@ -195,7 +195,7 @@ describe('Atomic Extension Tests', () => {
           TEST_CONFIG.TTL_BUFFER,
           ATOMIC_EXTENSION_CONFIG.STANDARD_TTL
         )
-      ).rejects.toThrow('Failed to load atomic extension script: Redis connection failed');
+      ).rejects.toThrow('Failed to load script ATOMIC_EXTEND');
     });
   });
 
