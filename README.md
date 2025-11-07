@@ -10,14 +10,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 
-**Integrations:** [NestJS](https://www.npmjs.com/package/nestjs-redlock-universal)
-
 ## Overview
 
 redlock-universal implements distributed Redis locks using the
 [Redlock algorithm](http://redis.io/topics/distlock). It supports both
 node-redis and ioredis clients through a unified TypeScript API with automatic
 lock extension capabilities.
+
+> **<img src="https://nestjs.com/img/logo-small.svg" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
 
 ## Features
 
