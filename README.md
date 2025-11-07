@@ -17,6 +17,8 @@ redlock-universal implements distributed Redis locks using the
 node-redis and ioredis clients through a unified TypeScript API with automatic
 lock extension capabilities.
 
+> **<img src="https://nestjs.com/img/logo-small.svg" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
+
 ## Features
 
 - 🔒 **Distributed Locks**: True Redlock algorithm for multi-instance Redis
