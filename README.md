@@ -10,6 +10,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 
+**Integrations:** [NestJS](https://www.npmjs.com/package/nestjs-redlock-universal)
+
 ## Overview
 
 redlock-universal implements distributed Redis locks using the
