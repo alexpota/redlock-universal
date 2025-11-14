@@ -9,6 +9,26 @@ export enum LogLevel {
   ERROR = 3,
 }
 
+/**
+ * Logger interface for external logger compatibility
+ *
+ * Message-first signature compatible with Winston, Bunyan, Log4js, and Console.
+ * For Pino, use createPinoAdapter() helper.
+ */
+export interface ILogger {
+  /** Log debug message */
+  debug(message: string, context?: Record<string, unknown>): void;
+
+  /** Log info message */
+  info(message: string, context?: Record<string, unknown>): void;
+
+  /** Log warning message */
+  warn(message: string, context?: Record<string, unknown>): void;
+
+  /** Log error message */
+  error(message: string, error?: Error, context?: Record<string, unknown>): void;
+}
+
 export interface LogEntry {
   readonly level: LogLevel;
   readonly message: string;
@@ -25,7 +45,11 @@ export interface LoggerConfig {
   readonly maxEntries?: number;
 }
 
-export class Logger {
+/**
+ * Built-in Logger implementation with extended features
+ * Implements ILogger interface for compatibility
+ */
+export class Logger implements ILogger {
   private readonly config: Required<LoggerConfig>;
   private readonly entries: LogEntry[] = [];
   private _reusableEntry: {

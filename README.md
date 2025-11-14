@@ -17,7 +17,10 @@ redlock-universal implements distributed Redis locks using the
 node-redis and ioredis clients through a unified TypeScript API with automatic
 lock extension capabilities.
 
-> **<img src="https://nestjs.com/img/logo-small.svg" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
+> **<img src="https://nestjs.com/img/logo-small.svg" width="18" height="18" alt="NestJS" style="vertical-align: middle;">
+> NestJS Integration:** Check out
+> [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal)
+> for decorator-based integration with dependency injection.
 
 ## Features
 
@@ -321,6 +324,76 @@ const recentErrors = entries.filter(
 );
 ```
 
+#### External Logger Integration
+
+Use your existing production logger (Winston, Pino, Bunyan, etc.) instead of the
+built-in Logger:
+
+**Winston (works directly):**
+
+```typescript
+import winston from 'winston';
+import { createLock } from 'redlock-universal';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [new winston.transports.Console()],
+});
+
+const lock = createLock({
+  adapter,
+  key: 'resource',
+  logger, // Winston works directly - no adapter needed!
+});
+```
+
+**Pino (requires adapter):**
+
+```typescript
+import pino from 'pino';
+import { createLock, createPinoAdapter } from 'redlock-universal';
+
+const pinoLogger = pino({ level: 'info' });
+const logger = createPinoAdapter(pinoLogger); // Convert to ILogger
+
+const lock = createLock({
+  adapter,
+  key: 'resource',
+  logger, // Pino adapter provides full compatibility
+});
+```
+
+**Bunyan (requires adapter):**
+
+```typescript
+import bunyan from 'bunyan';
+import { createLock, createBunyanAdapter } from 'redlock-universal';
+
+const bunyanLogger = bunyan.createLogger({ name: 'myapp' });
+const logger = createBunyanAdapter(bunyanLogger); // Convert to ILogger
+
+const lock = createLock({
+  adapter,
+  key: 'resource',
+  logger, // Bunyan adapter provides full compatibility
+});
+```
+
+**Compatible Loggers:**
+
+| Logger          | Works Directly | Adapter Needed               |
+| --------------- | -------------- | ---------------------------- |
+| Winston         | ✅ Yes         | No                           |
+| Console         | ✅ Yes         | No                           |
+| Built-in Logger | ✅ Yes         | No                           |
+| Bunyan          | ⚠️ Via Adapter | `createBunyanAdapter()`      |
+| Pino            | ⚠️ Via Adapter | `createPinoAdapter()`        |
+
+**Note:** Log4js uses `util.format()` for all arguments, which stringifies context objects instead of preserving structured data. For structured logging, use Winston, Bunyan (with adapter), or Pino (with adapter).
+
+See `examples/` directory for complete integration examples.
+
 ### Distributed Lock (RedLock)
 
 #### `createRedlock(config)`
@@ -564,21 +637,22 @@ try {
 
 ### Batch Lock Acquisition
 
-Acquire multiple locks atomically with all-or-nothing semantics using `LockManager`:
+Acquire multiple locks atomically with all-or-nothing semantics using
+`LockManager`:
 
 ```typescript
 import { LockManager } from 'redlock-universal';
 
 const manager = new LockManager({
   nodes: [adapter],
-  defaultTTL: 30000
+  defaultTTL: 30000,
 });
 
 // Atomic batch acquisition - either all locks acquired or none
 const handles = await manager.acquireBatch([
   'user:123',
   'account:456',
-  'order:789'
+  'order:789',
 ]);
 
 try {
@@ -592,13 +666,14 @@ try {
 
 #### Batch with Auto-Extension
 
-Combine batch acquisition with automatic lock renewal for long-running operations:
+Combine batch acquisition with automatic lock renewal for long-running
+operations:
 
 ```typescript
 // Batch locks with auto-extension
 await manager.usingBatch(
   ['user:123', 'account:456', 'order:789'],
-  async (signal) => {
+  async signal => {
     // All locks acquired atomically and will auto-extend
     for (const task of longRunningTasks) {
       await processTask(task);
@@ -620,8 +695,10 @@ await manager.usingBatch(
 Batch acquisition uses Redis Lua scripts to ensure atomicity:
 
 - **All-or-Nothing**: Either all locks are acquired or the operation fails
-- **No Partial States**: Prevents race conditions from acquiring locks individually
-- **Deadlock Prevention**: Keys are automatically sorted to ensure consistent lock order
+- **No Partial States**: Prevents race conditions from acquiring locks
+  individually
+- **Deadlock Prevention**: Keys are automatically sorted to ensure consistent
+  lock order
 - **Performance**: Single Redis round-trip instead of N sequential acquisitions
 
 ```typescript
@@ -629,7 +706,7 @@ try {
   const handles = await manager.acquireBatch([
     'resource:1',
     'resource:2',
-    'resource:3'
+    'resource:3',
   ]);
   // SUCCESS: All 3 locks acquired
 } catch (error) {
@@ -640,28 +717,34 @@ try {
 }
 ```
 
-For complete examples, see [`examples/batch-locks.ts`](./examples/batch-locks.ts).
+For complete examples, see
+[`examples/batch-locks.ts`](./examples/batch-locks.ts).
 
 ### Batch Operations Performance
 
-Batch lock acquisition delivers significant performance improvements over sequential locking:
+Batch lock acquisition delivers significant performance improvements over
+sequential locking:
 
 **Sequential vs Batch Comparison:**
 
-| Locks | Sequential | Batch   | Speedup  |
-|-------|-----------|---------|----------|
-| 3     | 2.34ms    | 0.62ms  | **3.8x** |
-| 5     | 3.46ms    | 0.60ms  | **5.8x** |
-| 10    | 4.98ms    | 0.34ms  | **14.7x** |
+| Locks | Sequential | Batch  | Speedup   |
+| ----- | ---------- | ------ | --------- |
+| 3     | 2.34ms     | 0.62ms | **3.8x**  |
+| 5     | 3.46ms     | 0.60ms | **5.8x**  |
+| 10    | 4.98ms     | 0.34ms | **14.7x** |
 
-_†Benchmarked on local Redis 7 (macOS, Node.js 22). **Performance varies between runs** due to system load, network latency, and Redis configuration. The relative speedup advantage (3-15x) remains consistent across different systems._
+_†Benchmarked on local Redis 7 (macOS, Node.js 22). **Performance varies between
+runs** due to system load, network latency, and Redis configuration. The
+relative speedup advantage (3-15x) remains consistent across different systems._
 
 **Key Performance Metrics:**
+
 - **Throughput**: 2,630 ops/sec for batch operations
 - **Auto-Extension Overhead**: 0.0% (negligible impact)
 - **Scalability**: Speedup increases with lock count
 
 **Why Batch is Faster:**
+
 - Single Lua script execution (atomic operation)
 - Eliminates N network round-trips
 - Sub-millisecond performance even for 10+ locks
@@ -792,9 +875,10 @@ redlock-universal delivers industry-leading performance:
 
 - **Lock acquisition**: 0.48ms mean latency (P95: 0.75ms) in lean mode
 - **Memory usage**: <2KB per operation (60% reduction via buffer pooling)
-- **Throughput**: 3,329 ops/sec (42% faster than redis-semaphore, 95% faster than
-  node-redlock)
-- **Batch operations**: 3.8x - 14.7x faster than sequential (scales with lock count)
+- **Throughput**: 3,329 ops/sec (42% faster than redis-semaphore, 95% faster
+  than node-redlock)
+- **Batch operations**: 3.8x - 14.7x faster than sequential (scales with lock
+  count)
 - **Test coverage**: 86%+ with 487 unit, integration, and E2E tests
 
 Performance modes:
@@ -864,25 +948,25 @@ testing. Our benchmarks:
 
 ### Technical Comparison (Verified Data)
 
-| Metric                          | redlock-universal       | node-redlock  | redis-semaphore |
-| ------------------------------- | ----------------------- | ------------- | --------------- |
+| Metric                          | redlock-universal        | node-redlock  | redis-semaphore |
+| ------------------------------- | ------------------------ | ------------- | --------------- |
 | **Maintenance & Adoption**      |
-| Weekly Downloads                | _New Package_           | 644,599       | 282,020         |
-| Last Updated                    | 2025 Active             | Mar 2022 ⚠️   | Mar 2025 ✅     |
-| Maintenance Status              | ✅ Active               | ⚠️ Stale (3y) | ✅ Active       |
+| Weekly Downloads                | _New Package_            | 644,599       | 282,020         |
+| Last Updated                    | 2025 Active              | Mar 2022 ⚠️   | Mar 2025 ✅     |
+| Maintenance Status              | ✅ Active                | ⚠️ Stale (3y) | ✅ Active       |
 | **Package Quality**             |
-| Runtime Dependencies            | 0 (peer only)           | 1             | 1               |
-| TypeScript Support              | ✅ Native               | ✅ Native     | ✅ Native       |
-| Test Coverage                   | 85%+ Unit + Integration | Unknown       | Unknown         |
+| Runtime Dependencies            | 0 (peer only)            | 1             | 1               |
+| TypeScript Support              | ✅ Native                | ✅ Native     | ✅ Native       |
+| Test Coverage                   | 85%+ Unit + Integration  | Unknown       | Unknown         |
 | **Performance Characteristics** |
 | Lock Acquisition†               | **0.48ms (P95: 0.75ms)** | ~0.4-0.8ms    | ~0.4-0.6ms      |
 | Throughput (ops/sec)†           | **3,329**                | 1,702         | 2,340           |
 | Memory per Operation†           | **<2KB**                 | ~8KB          | ~6KB            |
 
-_\*Benchmarked on local Redis 7 (macOS, Node.js 22). **Performance varies between
-runs** due to system load, network latency, and Redis configuration. All tested
-libraries deliver competitive sub-millisecond performance. Focus on features and
-reliability over micro-optimizations._
+_\*Benchmarked on local Redis 7 (macOS, Node.js 22). **Performance varies
+between runs** due to system load, network latency, and Redis configuration. All
+tested libraries deliver competitive sub-millisecond performance. Focus on
+features and reliability over micro-optimizations._
 
 ### Maintenance Analysis
 
@@ -919,8 +1003,8 @@ reliability over micro-optimizations._
 - **Clock drift handling**: Proper time synchronization assumptions
 - **Fault tolerance**: Graceful degradation on partial failures
 - **Performance optimized**: Memory-efficient buffer pooling, sub-millisecond
-  acquisition, and highest throughput among tested libraries (verified benchmarks
-  included)
+  acquisition, and highest throughput among tested libraries (verified
+  benchmarks included)
 
 ### Migration Guide
 
@@ -979,14 +1063,14 @@ npm run test:docker
 
 ## FAQ
 
-**Q: What's the performance overhead of auto-extension?**
-A: Minimal - typically <1ms using atomic operations.
+**Q: What's the performance overhead of auto-extension?** A: Minimal - typically
+<1ms using atomic operations.
 
-**Q: How does this handle Redis restarts?**
-A: Lua scripts auto-reload on NOSCRIPT errors, no action needed.
+**Q: How does this handle Redis restarts?** A: Lua scripts auto-reload on
+NOSCRIPT errors, no action needed.
 
-**Q: SimpleLock vs RedLock?**
-A: SimpleLock = single Redis (faster). RedLock = multiple Redis (fault-tolerant).
+**Q: SimpleLock vs RedLock?** A: SimpleLock = single Redis (faster). RedLock =
+multiple Redis (fault-tolerant).
 
 ## Troubleshooting
 
@@ -1027,14 +1111,21 @@ A: SimpleLock = single Redis (faster). RedLock = multiple Redis (fault-tolerant)
 Quick examples are shown above. For detailed implementations:
 
 **Real-World Patterns:**
-- [Database Transactions](./examples/database-transactions.ts) - Transaction safety patterns
-- [Distributed Cache Warming](./examples/cache-warming.ts) - Distributed cache coordination  
-- [Job Processing with Progress](./examples/job-processing.ts) - Long-running job management
+
+- [Database Transactions](./examples/database-transactions.ts) - Transaction
+  safety patterns
+- [Distributed Cache Warming](./examples/cache-warming.ts) - Distributed cache
+  coordination
+- [Job Processing with Progress](./examples/job-processing.ts) - Long-running
+  job management
 
 **Core Usage:**
+
 - [Simple Lock Usage](./examples/simple-lock-usage.ts) - Basic locking patterns
-- [Distributed Lock (RedLock)](./examples/redlock-usage.ts) - Multi-instance coordination
-- [Lock Extension Patterns](./examples/lock-extension.ts) - Manual extension strategies
+- [Distributed Lock (RedLock)](./examples/redlock-usage.ts) - Multi-instance
+  coordination
+- [Lock Extension Patterns](./examples/lock-extension.ts) - Manual extension
+  strategies
 - [Retry Strategies](./examples/lock-with-retry.ts) - Contention handling
 - [Monitoring & Observability](./examples/monitoring.ts) - Production monitoring
 - [Adapter Usage](./examples/adapter-usage.ts) - Redis client integration

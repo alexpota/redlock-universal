@@ -1,6 +1,6 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
-import type { Logger } from '../monitoring/Logger.js';
+import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
 import {
@@ -23,7 +23,7 @@ export class SimpleLock implements Lock {
   private readonly ttl: number;
   private readonly retryAttempts: number;
   private readonly retryDelay: number;
-  private readonly logger: Logger | undefined;
+  private readonly logger: ILogger | undefined;
   private readonly correlationId?: string;
   private readonly onAcquire?: (handle: LockHandle) => void;
   private readonly onRelease?: (handle: LockHandle) => void;
@@ -340,6 +340,7 @@ export class SimpleLock implements Lock {
         ttl: this.ttl,
         retryAttempts: this.retryAttempts,
         retryDelay: this.retryDelay,
+        ...(this.logger !== undefined && { logger: this.logger }),
       });
     }
     return this._configCache;

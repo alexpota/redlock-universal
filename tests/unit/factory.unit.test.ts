@@ -12,6 +12,7 @@ import { SimpleLock } from '../../src/locks/SimpleLock.js';
 import { LeanSimpleLock } from '../../src/locks/LeanSimpleLock.js';
 import { RedLock } from '../../src/locks/RedLock.js';
 import { ConfigurationError } from '../../src/types/errors.js';
+import type { ILogger } from '../../src/monitoring/Logger.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../src/types/adapters.js';
 
 describe('Factory Functions', () => {
@@ -124,6 +125,54 @@ describe('Factory Functions', () => {
       expect(() => createLock(config)).toThrow(ConfigurationError);
       expect(() => createLock(config)).toThrow('Lock key is required');
     });
+
+    it('should pass logger to SimpleLock when provided', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const config: CreateLockConfig = {
+        adapter: mockAdapter,
+        key: 'test-key',
+        logger: mockLogger,
+      };
+
+      const lock = createLock(config);
+      expect(lock).toBeInstanceOf(SimpleLock);
+      expect((lock as SimpleLock).getConfig()).toHaveProperty('logger', mockLogger);
+    });
+
+    it('should pass logger to LeanSimpleLock when provided', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const config: CreateLockConfig = {
+        adapter: mockAdapter,
+        key: 'test-key',
+        performance: 'lean',
+        logger: mockLogger,
+      };
+
+      const lock = createLock(config);
+      expect(lock).toBeInstanceOf(LeanSimpleLock);
+      // LeanSimpleLock accepts but doesn't expose logger via getConfig
+    });
+
+    it('should work without logger parameter', () => {
+      const config: CreateLockConfig = {
+        adapter: mockAdapter,
+        key: 'test-key',
+      };
+
+      const lock = createLock(config);
+      expect(lock).toBeInstanceOf(SimpleLock);
+      expect((lock as SimpleLock).getConfig().logger).toBeUndefined();
+    });
   });
 
   describe('createLocks', () => {
@@ -182,6 +231,25 @@ describe('Factory Functions', () => {
         'At least one lock key is required'
       );
     });
+
+    it('should propagate logger to all created locks', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const keys = ['key1', 'key2'];
+      const options = { logger: mockLogger };
+
+      const locks = createLocks(mockAdapter, keys, options);
+
+      expect(locks).toHaveLength(2);
+      locks.forEach(lock => {
+        expect(lock).toBeInstanceOf(SimpleLock);
+        expect((lock as SimpleLock).getConfig()).toHaveProperty('logger', mockLogger);
+      });
+    });
   });
 
   describe('createPrefixedLock', () => {
@@ -220,6 +288,19 @@ describe('Factory Functions', () => {
       expect(() => createPrefixedLock(mockAdapter, '', '')).toThrow(
         'Both prefix and key are required'
       );
+    });
+
+    it('should propagate logger to created lock', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const lock = createPrefixedLock(mockAdapter, 'prefix:', 'key', { logger: mockLogger });
+
+      expect(lock).toBeInstanceOf(SimpleLock);
+      expect((lock as SimpleLock).getConfig()).toHaveProperty('logger', mockLogger);
     });
   });
 
@@ -301,6 +382,35 @@ describe('Factory Functions', () => {
       expect(() => createRedlock(config)).toThrow(ConfigurationError);
       expect(() => createRedlock(config)).toThrow('Lock key is required');
     });
+
+    it('should pass logger to RedLock when provided', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const config: CreateRedlockConfig = {
+        adapters: mockAdapters,
+        key: 'test-key',
+        logger: mockLogger,
+      };
+
+      const lock = createRedlock(config);
+      expect(lock).toBeInstanceOf(RedLock);
+      expect((lock as RedLock).getConfig()).toHaveProperty('logger', mockLogger);
+    });
+
+    it('should work without logger parameter', () => {
+      const config: CreateRedlockConfig = {
+        adapters: mockAdapters,
+        key: 'test-key',
+      };
+
+      const lock = createRedlock(config);
+      expect(lock).toBeInstanceOf(RedLock);
+      expect((lock as RedLock).getConfig().logger).toBeUndefined();
+    });
   });
 
   describe('createRedlocks', () => {
@@ -362,6 +472,25 @@ describe('Factory Functions', () => {
       expect(() => createRedlocks(mockAdapters, null as any)).toThrow(
         'At least one lock key is required'
       );
+    });
+
+    it('should propagate logger to all created RedLocks', () => {
+      const mockLogger: ILogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const keys = ['resource1', 'resource2'];
+      const options = { logger: mockLogger };
+
+      const locks = createRedlocks(mockAdapters, keys, options);
+
+      expect(locks).toHaveLength(2);
+      locks.forEach(lock => {
+        expect(lock).toBeInstanceOf(RedLock);
+        expect((lock as RedLock).getConfig()).toHaveProperty('logger', mockLogger);
+      });
     });
   });
 });

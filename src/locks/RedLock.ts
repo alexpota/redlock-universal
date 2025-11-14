@@ -5,7 +5,7 @@
 
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, RedLockConfig } from '../types/locks.js';
-import type { Logger } from '../monitoring/Logger.js';
+import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockId, generateLockValue, safeCompare } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
@@ -41,7 +41,7 @@ interface NodeLockResult {
  */
 export class RedLock implements Lock {
   private readonly adapters: readonly RedisAdapter[];
-  private readonly config: Required<Omit<RedLockConfig, 'logger'>> & { logger?: Logger };
+  private readonly config: Required<Omit<RedLockConfig, 'logger'>> & { logger?: ILogger };
 
   constructor(config: RedLockConfig) {
     this.adapters = config.adapters;
