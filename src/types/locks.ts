@@ -3,7 +3,7 @@
  */
 
 import type { RedisAdapter } from './adapters.js';
-import type { Logger } from '../monitoring/Logger.js';
+import type { ILogger } from '../monitoring/Logger.js';
 import type { ExtendedAbortSignal } from '../utils/auto-extension.js';
 
 /**
@@ -67,7 +67,7 @@ export interface SimpleLockConfig {
   readonly retryDelay?: number;
 
   /** Optional logger for structured logging (default: none) */
-  readonly logger?: Logger;
+  readonly logger?: ILogger;
 }
 
 /**
@@ -96,7 +96,7 @@ export interface RedLockConfig {
   readonly clockDriftFactor?: number;
 
   /** Optional logger for structured logging (default: none) */
-  readonly logger?: Logger;
+  readonly logger?: ILogger;
 }
 
 /**

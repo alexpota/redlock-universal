@@ -1,5 +1,6 @@
 import type { RedisAdapter } from './types/adapters.js';
 import type { Lock, SimpleLockConfig, RedLockConfig } from './types/locks.js';
+import type { ILogger } from './monitoring/Logger.js';
 import { SimpleLock } from './locks/SimpleLock.js';
 import { LeanSimpleLock } from './locks/LeanSimpleLock.js';
 import { RedLock } from './locks/RedLock.js';
@@ -21,6 +22,8 @@ export interface CreateLockConfig {
   readonly retryDelay?: number;
   /** Performance mode: 'standard' (default) | 'lean' | 'enterprise' */
   readonly performance?: 'standard' | 'lean' | 'enterprise';
+  /** Optional logger for structured logging (default: none) */
+  readonly logger?: ILogger;
 }
 
 /**
@@ -48,6 +51,7 @@ export function createLock(config: CreateLockConfig): Lock {
     ...(config.ttl !== undefined && { ttl: config.ttl }),
     ...(config.retryAttempts !== undefined && { retryAttempts: config.retryAttempts }),
     ...(config.retryDelay !== undefined && { retryDelay: config.retryDelay }),
+    ...(config.logger !== undefined && { logger: config.logger }),
   };
 
   const performance = config.performance ?? 'standard';
@@ -136,6 +140,8 @@ export interface CreateRedlockConfig {
   readonly retryDelay?: number;
   /** Clock drift factor (default: 0.01) */
   readonly clockDriftFactor?: number;
+  /** Optional logger for structured logging (default: none) */
+  readonly logger?: ILogger;
 }
 
 /**
@@ -166,6 +172,7 @@ export function createRedlock(config: CreateRedlockConfig): Lock {
     ...(config.retryAttempts !== undefined && { retryAttempts: config.retryAttempts }),
     ...(config.retryDelay !== undefined && { retryDelay: config.retryDelay }),
     ...(config.clockDriftFactor !== undefined && { clockDriftFactor: config.clockDriftFactor }),
+    ...(config.logger !== undefined && { logger: config.logger }),
   };
 
   return new RedLock(redlockConfig);

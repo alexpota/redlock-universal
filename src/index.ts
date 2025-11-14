@@ -22,8 +22,17 @@ export type { RedisAdapter, RedisAdapterOptions } from './adapters/index.js';
 export { LockManager } from './manager/index.js';
 export type { LockManagerConfig, LockStats } from './manager/index.js';
 
-export { MetricsCollector, HealthChecker, Logger, LogLevel, logger } from './monitoring/index.js';
+export {
+  MetricsCollector,
+  HealthChecker,
+  Logger,
+  LogLevel,
+  logger,
+  createPinoAdapter,
+  createBunyanAdapter,
+} from './monitoring/index.js';
 export type {
+  ILogger,
   LockMetrics,
   RedLockMetrics,
   MetricsSummary,
@@ -32,6 +41,8 @@ export type {
   SystemHealth,
   LogEntry,
   LoggerConfig,
+  PinoLogger,
+  BunyanLogger,
 } from './monitoring/index.js';
 
 export {

@@ -4,7 +4,7 @@
  */
 
 import type { Lock, LockHandle } from '../types/locks.js';
-import type { Logger } from '../monitoring/Logger.js';
+import type { ILogger } from '../monitoring/Logger.js';
 import type { AtomicExtensionResult } from '../types/adapters.js';
 import { DEFAULTS } from '../constants.js';
 
@@ -25,7 +25,7 @@ export interface AutoExtensionConfig<T> {
   /** Minimum interval between extension attempts */
   readonly minExtensionInterval?: number;
   /** Optional logger for error reporting */
-  readonly logger?: Logger;
+  readonly logger?: ILogger;
 }
 
 /**
@@ -267,7 +267,7 @@ export async function executeWithSingleLockExtension<T>(
   handle: LockHandle,
   ttl: number,
   routine: (signal: AbortSignal) => Promise<T>,
-  logger?: Logger
+  logger?: ILogger
 ): Promise<T> {
   const baseConfig = {
     locks: [lock],
