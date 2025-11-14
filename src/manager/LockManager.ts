@@ -1,6 +1,6 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { LockHandle } from '../types/locks.js';
-import type { Logger } from '../monitoring/Logger.js';
+import type { ILogger } from '../monitoring/Logger.js';
 import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
@@ -21,7 +21,7 @@ export interface LockManagerConfig {
   /** Default retry delay in milliseconds */
   readonly defaultRetryDelay?: number;
   /** Optional logger for operational visibility */
-  readonly logger?: Logger;
+  readonly logger?: ILogger;
   /** Monitoring configuration */
   readonly monitoring?: {
     readonly enabled?: boolean;
@@ -48,7 +48,7 @@ export interface LockStats {
  */
 export class LockManager {
   private readonly config: Required<Omit<LockManagerConfig, 'logger'>> & {
-    readonly logger?: Logger;
+    readonly logger?: ILogger;
   };
   private readonly activeLocks = new Map<string, LockHandle>();
   private readonly stats = {
