@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.7.0",
+  "version": "0.7.3",
   "description": "Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis clients",
   "keywords": [
     "redis",
@@ -110,7 +110,8 @@
     }
   },
   "overrides": {
-    "tmp": "^0.2.4"
+    "tmp": "^0.2.4",
+    "glob": "^10.5.0"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
@@ -120,6 +121,7 @@
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "@vitest/coverage-v8": "^3.2.4",
+    "audit-ci": "^7.1.0",
     "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^8.50.0",
