@@ -13,6 +13,12 @@ const MAX_KEY_LENGTH = 512;
 const MAX_VALUE_LENGTH = 1024;
 const MAX_TTL_MS = 86_400_000; // 24 hours
 
+// Redis Lua script return codes
+export const REDIS_SCRIPT_SUCCESS = 1;
+export const REDIS_SCRIPT_PARTIAL_FAILURE = 0;
+export const REDIS_SCRIPT_FAILURE = -1;
+export const REDIS_KEY_MISSING = -2;
+
 /**
  * Atomic extension Lua script with TTL feedback and race condition protection
  *
@@ -139,6 +145,8 @@ export const SCRIPT_CACHE_KEYS = {
   ATOMIC_EXTEND: 'ATOMIC_EXTEND',
   BATCH_ACQUIRE: 'BATCH_ACQUIRE',
   INSPECT: 'INSPECT',
+  DELETE_IF_MATCH: 'DELETE_IF_MATCH',
+  EXTEND_IF_MATCH: 'EXTEND_IF_MATCH',
 } as const;
 
 /**
@@ -278,7 +286,7 @@ export abstract class BaseAdapter implements RedisAdapter {
   ): BatchAcquireResult {
     const [resultCode, countOrIndex, failedKey] = result;
 
-    if (resultCode === 1) {
+    if (resultCode === REDIS_SCRIPT_SUCCESS) {
       return {
         success: true,
         acquiredCount: countOrIndex,
@@ -323,30 +331,30 @@ export abstract class BaseAdapter implements RedisAdapter {
     const [resultCode, actualTTL] = scriptResult;
 
     switch (resultCode) {
-      case 1:
+      case REDIS_SCRIPT_SUCCESS:
         return {
-          resultCode: 1,
+          resultCode: REDIS_SCRIPT_SUCCESS,
           actualTTL,
           message: `Extension successful (${actualTTL}ms remaining before extension)`,
         };
-      case 0:
+      case REDIS_SCRIPT_PARTIAL_FAILURE:
         return {
-          resultCode: 0,
+          resultCode: REDIS_SCRIPT_PARTIAL_FAILURE,
           actualTTL,
           message: `Extension too late (only ${actualTTL}ms left, needed ${minTTL}ms minimum)`,
         };
-      case -1:
+      case REDIS_SCRIPT_FAILURE:
         return {
-          resultCode: -1,
+          resultCode: REDIS_SCRIPT_FAILURE,
           actualTTL,
           message:
-            actualTTL === -2
+            actualTTL === REDIS_KEY_MISSING
               ? `Lock key "${key}" no longer exists`
               : `Lock value changed - lock stolen (${actualTTL}ms remaining)`,
         };
       default:
         return {
-          resultCode: -1,
+          resultCode: REDIS_SCRIPT_FAILURE,
           actualTTL,
           message: `Unexpected result code: ${resultCode}`,
         };

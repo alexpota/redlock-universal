@@ -13,6 +13,7 @@ import {
   BATCH_ACQUIRE_SCRIPT,
   INSPECT_SCRIPT,
   SCRIPT_CACHE_KEYS,
+  REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
 
 // Redis command constants
@@ -135,15 +136,14 @@ export class IoredisAdapter extends BaseAdapter {
 
     const prefixedKey = this.prefixKey(key);
 
-    try {
-      const result = await this.withTimeout(
-        this.client.eval(DELETE_IF_MATCH_SCRIPT, 1, prefixedKey, value) as Promise<number>
-      );
+    const result = await this._executeScript<number>(
+      SCRIPT_CACHE_KEYS.DELETE_IF_MATCH,
+      DELETE_IF_MATCH_SCRIPT,
+      [prefixedKey],
+      [value]
+    );
 
-      return result === 1;
-    } catch (error) {
-      throw new Error(`Failed to conditionally delete key: ${(error as Error).message}`);
-    }
+    return result === REDIS_SCRIPT_SUCCESS;
   }
 
   async extendIfMatch(key: string, value: string, ttl: number): Promise<boolean> {
@@ -153,21 +153,14 @@ export class IoredisAdapter extends BaseAdapter {
 
     const prefixedKey = this.prefixKey(key);
 
-    try {
-      const result = await this.withTimeout(
-        this.client.eval(
-          EXTEND_IF_MATCH_SCRIPT,
-          1,
-          prefixedKey,
-          value,
-          ttl.toString()
-        ) as Promise<number>
-      );
+    const result = await this._executeScript<number>(
+      SCRIPT_CACHE_KEYS.EXTEND_IF_MATCH,
+      EXTEND_IF_MATCH_SCRIPT,
+      [prefixedKey],
+      [value, ttl]
+    );
 
-      return result === 1;
-    } catch (error) {
-      throw new Error(`Failed to extend lock TTL: ${(error as Error).message}`);
-    }
+    return result === REDIS_SCRIPT_SUCCESS;
   }
 
   async atomicExtend(
