@@ -13,6 +13,8 @@ describe('IoredisAdapter Unit Tests', () => {
       get: vi.fn(),
       del: vi.fn(),
       eval: vi.fn(),
+      script: vi.fn(),
+      evalsha: vi.fn(),
       ping: vi.fn(),
       disconnect: vi.fn(),
       status: 'ready',
@@ -98,15 +100,17 @@ describe('IoredisAdapter Unit Tests', () => {
 
   describe('delIfMatch', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
-      mockClient.eval.mockResolvedValue(1);
+      mockClient.script.mockResolvedValue('mock-sha');
+      mockClient.evalsha.mockResolvedValue(1);
 
       const result = await adapter.delIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE
       );
 
-      expect(mockClient.eval).toHaveBeenCalledWith(
-        expect.stringContaining('if redis.call("GET", KEYS[1]) == ARGV[1]'),
+      expect(mockClient.script).toHaveBeenCalledWith('LOAD', expect.any(String));
+      expect(mockClient.evalsha).toHaveBeenCalledWith(
+        'mock-sha',
         1,
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE
@@ -115,7 +119,8 @@ describe('IoredisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.eval.mockResolvedValue(0);
+      mockClient.script.mockResolvedValue('mock-sha');
+      mockClient.evalsha.mockResolvedValue(0);
 
       const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
 
@@ -125,7 +130,8 @@ describe('IoredisAdapter Unit Tests', () => {
 
   describe('extendIfMatch', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
-      mockClient.eval.mockResolvedValue(1);
+      mockClient.script.mockResolvedValue('mock-sha');
+      mockClient.evalsha.mockResolvedValue(1);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
@@ -133,8 +139,9 @@ describe('IoredisAdapter Unit Tests', () => {
         10000
       );
 
-      expect(mockClient.eval).toHaveBeenCalledWith(
-        expect.stringContaining('redis.call("PEXPIRE", KEYS[1], ARGV[2])'),
+      expect(mockClient.script).toHaveBeenCalledWith('LOAD', expect.any(String));
+      expect(mockClient.evalsha).toHaveBeenCalledWith(
+        'mock-sha',
         1,
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE,
@@ -144,7 +151,8 @@ describe('IoredisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.eval.mockResolvedValue(0);
+      mockClient.script.mockResolvedValue('mock-sha');
+      mockClient.evalsha.mockResolvedValue(0);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,

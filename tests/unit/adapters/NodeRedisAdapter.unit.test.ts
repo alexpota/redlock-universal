@@ -13,6 +13,8 @@ describe('NodeRedisAdapter Unit Tests', () => {
       get: vi.fn(),
       del: vi.fn(),
       eval: vi.fn(),
+      scriptLoad: vi.fn(),
+      evalSha: vi.fn(),
       ping: vi.fn(),
       disconnect: vi.fn(),
       isReady: true,
@@ -99,25 +101,25 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('delIfMatch', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
-      mockClient.eval.mockResolvedValue(1);
+      mockClient.scriptLoad.mockResolvedValue('mock-sha');
+      mockClient.evalSha.mockResolvedValue(1);
 
       const result = await adapter.delIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE
       );
 
-      expect(mockClient.eval).toHaveBeenCalledWith(
-        expect.stringContaining('if redis.call("GET", KEYS[1]) == ARGV[1]'),
-        {
-          keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
-          arguments: [TEST_STRINGS.TEST_VALUE],
-        }
-      );
+      expect(mockClient.scriptLoad).toHaveBeenCalled();
+      expect(mockClient.evalSha).toHaveBeenCalledWith('mock-sha', {
+        keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
+        arguments: [TEST_STRINGS.TEST_VALUE],
+      });
       expect(result).toBe(true);
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.eval.mockResolvedValue(0);
+      mockClient.scriptLoad.mockResolvedValue('mock-sha');
+      mockClient.evalSha.mockResolvedValue(0);
 
       const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
 
@@ -127,7 +129,8 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('extendIfMatch', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
-      mockClient.eval.mockResolvedValue(1);
+      mockClient.scriptLoad.mockResolvedValue('mock-sha');
+      mockClient.evalSha.mockResolvedValue(1);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
@@ -135,18 +138,17 @@ describe('NodeRedisAdapter Unit Tests', () => {
         10000
       );
 
-      expect(mockClient.eval).toHaveBeenCalledWith(
-        expect.stringContaining('redis.call("PEXPIRE", KEYS[1], ARGV[2])'),
-        {
-          keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
-          arguments: [TEST_STRINGS.TEST_VALUE, '10000'],
-        }
-      );
+      expect(mockClient.scriptLoad).toHaveBeenCalled();
+      expect(mockClient.evalSha).toHaveBeenCalledWith('mock-sha', {
+        keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
+        arguments: [TEST_STRINGS.TEST_VALUE, '10000'],
+      });
       expect(result).toBe(true);
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.eval.mockResolvedValue(0);
+      mockClient.scriptLoad.mockResolvedValue('mock-sha');
+      mockClient.evalSha.mockResolvedValue(0);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
