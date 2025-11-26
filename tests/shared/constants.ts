@@ -1,4 +1,7 @@
 export const TEST_CONFIG = {
+  /** Ultra short TTL for rapid expiration tests in milliseconds */
+  ULTRA_SHORT_TTL: 50,
+
   /** Very short TTL for quick expiration tests in milliseconds */
   VERY_SHORT_TTL: 1000,
 

@@ -17,6 +17,17 @@ export interface AtomicExtensionResult {
 }
 
 /**
+ * Result of lock inspection operation
+ * Returns the current lock owner and remaining TTL
+ */
+export interface LockInspection {
+  /** Current lock value (owner token) */
+  readonly value: string;
+  /** Remaining TTL in milliseconds */
+  readonly ttl: number;
+}
+
+/**
  * Result of successful batch lock acquisition
  */
 export interface BatchAcquireSuccess {
@@ -132,6 +143,15 @@ export interface RedisAdapter {
    * @throws Error if keys and values arrays have different lengths
    */
   batchSetNX(keys: string[], values: string[], ttl: number): Promise<BatchAcquireResult>;
+
+  /**
+   * Atomically inspect a lock's current state
+   * Returns the lock value (owner) and remaining TTL in a single operation
+   *
+   * @param key - Redis key to inspect
+   * @returns Promise resolving to LockInspection if key exists, null otherwise
+   */
+  inspect(key: string): Promise<LockInspection | null>;
 
   /**
    * Ping Redis server

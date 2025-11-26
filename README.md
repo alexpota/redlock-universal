@@ -394,6 +394,104 @@ const lock = createLock({
 
 See `examples/` directory for complete integration examples.
 
+#### Lock Inspection
+
+Inspect lock state atomically to debug stuck locks or monitor lock ownership:
+
+```typescript
+import { NodeRedisAdapter } from 'redlock-universal';
+
+const adapter = NodeRedisAdapter.from(client);
+
+// Inspect lock state
+const inspection = await adapter.inspect('my-resource');
+
+if (inspection) {
+  console.log('Lock owner:', inspection.value);
+  console.log('TTL remaining:', inspection.ttl, 'ms');
+
+  // Use for debugging stuck locks
+  if (inspection.ttl < 1000) {
+    console.warn('Lock expiring soon!');
+  }
+} else {
+  console.log('Lock is not currently held');
+}
+```
+
+**Use Cases:**
+- **Debugging**: Identify which process holds a lock
+- **Monitoring**: Track lock ownership and expiration
+- **Diagnostics**: Understand lock contention issues
+
+**Important Notes:**
+- Returns `null` if lock doesn't exist
+- TTL is in milliseconds
+- Operation is atomic (uses Lua script)
+- Available on all adapters (NodeRedisAdapter, IoredisAdapter, MemoryAdapter)
+
+#### MemoryAdapter (Testing)
+
+For unit tests without Redis:
+
+```typescript
+import { MemoryAdapter, createLock } from 'redlock-universal';
+
+// Create in-memory adapter
+const adapter = new MemoryAdapter();
+
+// Use in tests
+const lock = createLock({
+  adapter,
+  key: 'test-resource',
+  ttl: 5000,
+});
+
+// Test lock behavior
+const handle = await lock.acquire();
+expect(handle.key).toBe('test-resource');
+await lock.release(handle);
+
+// Cleanup
+adapter.clear(); // Remove all locks
+await adapter.disconnect(); // Clean up timers
+```
+
+**⚠️ TESTING ONLY**: MemoryAdapter is NOT suitable for production use. It lacks:
+- Persistence (all locks lost on process restart)
+- Cross-process synchronization (single process only)
+- Network reliability (no Redis connection handling)
+
+**Features:**
+- Full RedisAdapter interface compatibility
+- Proper TTL expiration (using setTimeout)
+- Atomic batch operations
+- No Docker or Redis dependencies
+
+**Test Setup Example:**
+```typescript
+describe('My Feature', () => {
+  let adapter: MemoryAdapter;
+
+  beforeEach(() => {
+    adapter = new MemoryAdapter();
+  });
+
+  afterEach(async () => {
+    adapter.clear(); // Clean locks between tests
+    await adapter.disconnect(); // Clean up timers
+  });
+
+  it('should handle lock contention', async () => {
+    const lock1 = createLock({ adapter, key: 'shared', ttl: 5000 });
+    const lock2 = createLock({ adapter, key: 'shared', ttl: 5000 });
+
+    await lock1.acquire();
+    await expect(lock2.acquire()).rejects.toThrow(); // Contention!
+  });
+});
+```
+
 ### Distributed Lock (RedLock)
 
 #### `createRedlock(config)`

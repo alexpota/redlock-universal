@@ -2,6 +2,7 @@ import type {
   RedisAdapterOptions,
   AtomicExtensionResult,
   BatchAcquireResult,
+  LockInspection,
 } from '../types/adapters.js';
 import {
   BaseAdapter,
@@ -9,14 +10,14 @@ import {
   DELETE_IF_MATCH_SCRIPT,
   EXTEND_IF_MATCH_SCRIPT,
   BATCH_ACQUIRE_SCRIPT,
+  INSPECT_SCRIPT,
+  SCRIPT_CACHE_KEYS,
 } from './BaseAdapter.js';
 
 // Redis error constants
 const REDIS_ERROR_NOSCRIPT = 'NOSCRIPT';
 
 const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
-const SCRIPT_CACHE_KEY_ATOMIC_EXTEND = 'ATOMIC_EXTEND';
-const SCRIPT_CACHE_KEY_BATCH_ACQUIRE = 'BATCH_ACQUIRE';
 
 /**
  * Flexible type for node-redis clients.
@@ -203,7 +204,7 @@ export class NodeRedisAdapter extends BaseAdapter {
     const prefixedKey = this.prefixKey(key);
 
     const result = await this._executeScript<[number, number]>(
-      SCRIPT_CACHE_KEY_ATOMIC_EXTEND,
+      SCRIPT_CACHE_KEYS.ATOMIC_EXTEND,
       ATOMIC_EXTEND_SCRIPT,
       [prefixedKey],
       [value, minTTL, newTTL]
@@ -213,46 +214,35 @@ export class NodeRedisAdapter extends BaseAdapter {
   }
 
   async batchSetNX(keys: string[], values: string[], ttl: number): Promise<BatchAcquireResult> {
-    if (keys.length !== values.length) {
-      throw new TypeError('Keys and values arrays must have the same length');
-    }
-
-    if (keys.length === 0) {
-      throw new TypeError('At least one key is required for batch acquisition');
-    }
-
-    keys.forEach(k => this.validateKey(k));
-    values.forEach(v => this.validateValue(v));
-    this.validateTTL(ttl);
+    this.validateBatchAcquisition(keys, values, ttl);
 
     const prefixedKeys = keys.map(k => this.prefixKey(k));
 
     const result = await this._executeScript<[number, number, string?]>(
-      SCRIPT_CACHE_KEY_BATCH_ACQUIRE,
+      SCRIPT_CACHE_KEYS.BATCH_ACQUIRE,
       BATCH_ACQUIRE_SCRIPT,
       prefixedKeys,
       [...values, ttl]
     );
 
-    const [resultCode, countOrIndex, failedKey] = result;
+    return this.parseBatchAcquireResult(result, keys);
+  }
 
-    if (resultCode === 1) {
-      return {
-        success: true,
-        acquiredCount: countOrIndex,
-      };
-    } else {
-      const keyThatFailed = failedKey
-        ? this.stripPrefix(failedKey)
-        : (keys[countOrIndex - 1] ?? 'unknown');
+  async inspect(key: string): Promise<LockInspection | null> {
+    this.validateKey(key);
 
-      return {
-        success: false,
-        acquiredCount: 0,
-        failedIndex: countOrIndex,
-        failedKey: keyThatFailed,
-      };
-    }
+    const prefixedKey = this.prefixKey(key);
+
+    // Execute Lua script that atomically gets value and TTL
+    // Returns [value, ttl] array or null if key doesn't exist
+    const result = await this._executeScript<[string, number] | null>(
+      SCRIPT_CACHE_KEYS.INSPECT,
+      INSPECT_SCRIPT,
+      [prefixedKey],
+      []
+    );
+
+    return this.parseInspectionResult(result);
   }
 
   async ping(): Promise<string> {
