@@ -69,7 +69,7 @@ export function createLock(config: CreateLockConfig): Lock {
 /**
  * Create multiple locks with shared configuration
  *
- * @param adapter - Redis adapter to use for all locks
+ * @param adapter - Redis adapter instance
  * @param keys - Array of lock keys
  * @param options - Shared configuration options
  * @returns Array of lock instances

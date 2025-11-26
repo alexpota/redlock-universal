@@ -16,8 +16,8 @@ export type { CreateLockConfig, CreateRedlockConfig } from './factory.js';
 export { SimpleLock, LeanSimpleLock, RedLock } from './locks/index.js';
 export type { Lock, LockHandle, SimpleLockConfig, RedLockConfig } from './locks/index.js';
 
-export { BaseAdapter, NodeRedisAdapter, IoredisAdapter } from './adapters/index.js';
-export type { RedisAdapter, RedisAdapterOptions } from './adapters/index.js';
+export { BaseAdapter, NodeRedisAdapter, IoredisAdapter, MemoryAdapter } from './adapters/index.js';
+export type { RedisAdapter, RedisAdapterOptions, LockInspection } from './adapters/index.js';
 
 export { LockManager } from './manager/index.js';
 export type { LockManagerConfig, LockStats } from './manager/index.js';

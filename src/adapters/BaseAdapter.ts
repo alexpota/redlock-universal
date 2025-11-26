@@ -3,6 +3,7 @@ import type {
   RedisAdapterOptions,
   AtomicExtensionResult,
   BatchAcquireResult,
+  LockInspection,
 } from '../types/adapters.js';
 import type { Logger } from '../monitoring/Logger.js';
 import { DEFAULTS } from '../constants.js';
@@ -110,6 +111,37 @@ export const BATCH_ACQUIRE_SCRIPT = `
 `.trim();
 
 /**
+ * Lock inspection Lua script
+ * Atomically retrieves lock value and remaining TTL
+ *
+ * KEYS[1]: lock key
+ *
+ * Returns: [value, ttl] as array, or nil if key doesn't exist
+ *   value: current lock value (owner token)
+ *   ttl: remaining TTL in milliseconds (-2 if key doesn't exist, -1 if no TTL)
+ */
+export const INSPECT_SCRIPT = `
+local value = redis.call("GET", KEYS[1])
+-- If key doesn't exist, return nil (becomes null in JS)
+if not value then
+  return nil
+end
+local ttl = redis.call("PTTL", KEYS[1])
+-- Returns [value, ttl] as array
+return {value, ttl}
+`.trim();
+
+/**
+ * Script cache keys for internal use by adapters
+ * @internal
+ */
+export const SCRIPT_CACHE_KEYS = {
+  ATOMIC_EXTEND: 'ATOMIC_EXTEND',
+  BATCH_ACQUIRE: 'BATCH_ACQUIRE',
+  INSPECT: 'INSPECT',
+} as const;
+
+/**
  * Base adapter class providing common functionality for all Redis clients.
  * Implements validation and error handling that's shared across adapters.
  */
@@ -184,6 +216,7 @@ export abstract class BaseAdapter implements RedisAdapter {
   /**
    * Handles timeout for Redis operations
    * Properly cleans up timeout handles to prevent memory leaks
+   * Uses .unref() to allow Node.js to exit even if timeout is pending
    */
   protected async withTimeout<T>(
     operation: Promise<T>,
@@ -196,6 +229,8 @@ export abstract class BaseAdapter implements RedisAdapter {
         () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
         timeoutMs
       );
+      // Prevent timeout from keeping process alive
+      timeoutHandle.unref();
     });
 
     try {
@@ -205,6 +240,76 @@ export abstract class BaseAdapter implements RedisAdapter {
         clearTimeout(timeoutHandle);
       }
     }
+  }
+
+  /**
+   * Validate batch acquisition parameters
+   * Ensures consistent validation across all adapters
+   */
+  protected validateBatchAcquisition(keys: string[], values: string[], ttl: number): void {
+    if (keys.length !== values.length) {
+      throw new TypeError('Keys and values arrays must have the same length');
+    }
+
+    if (keys.length === 0) {
+      throw new TypeError('At least one key is required for batch acquisition');
+    }
+
+    for (let i = 0; i < keys.length; i++) {
+      this.validateKey(keys[i]!);
+    }
+    for (let i = 0; i < values.length; i++) {
+      this.validateValue(values[i]!);
+    }
+    this.validateTTL(ttl);
+  }
+
+  /**
+   * Parse batch acquisition script result into BatchAcquireResult
+   * Ensures consistent handling across all adapters
+   *
+   * @param result - Lua script result [resultCode, countOrIndex, failedKey?]
+   * @param keys - Original keys array for fallback lookup
+   * @returns BatchAcquireResult object
+   */
+  protected parseBatchAcquireResult(
+    result: [number, number, string?],
+    keys: string[]
+  ): BatchAcquireResult {
+    const [resultCode, countOrIndex, failedKey] = result;
+
+    if (resultCode === 1) {
+      return {
+        success: true,
+        acquiredCount: countOrIndex,
+      };
+    } else {
+      const keyThatFailed = failedKey
+        ? this.stripPrefix(failedKey)
+        : (keys[countOrIndex - 1] ?? 'unknown');
+
+      return {
+        success: false,
+        acquiredCount: 0,
+        failedIndex: countOrIndex,
+        failedKey: keyThatFailed,
+      };
+    }
+  }
+
+  /**
+   * Parse inspection script result into LockInspection object
+   * Ensures consistent handling of Lua array return value across all adapters
+   *
+   * @param result - Lua script result [value, ttl] or null
+   * @returns LockInspection object or null if key doesn't exist
+   */
+  protected parseInspectionResult(result: [string, number] | null): LockInspection | null {
+    if (!result) {
+      return null;
+    }
+    const [value, ttl] = result;
+    return { value, ttl };
   }
 
   /**
@@ -260,6 +365,7 @@ export abstract class BaseAdapter implements RedisAdapter {
     newTTL: number
   ): Promise<AtomicExtensionResult>;
   abstract batchSetNX(keys: string[], values: string[], ttl: number): Promise<BatchAcquireResult>;
+  abstract inspect(key: string): Promise<LockInspection | null>;
   abstract ping(): Promise<string>;
   abstract isConnected(): boolean;
   abstract disconnect(): Promise<void>;
