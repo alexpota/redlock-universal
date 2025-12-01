@@ -29,6 +29,9 @@ jobs:
     - name: Run security audit
       run: npx audit-ci --config audit-ci.json
 
+    - name: Verify package signatures
+      run: npm audit signatures
+
   # Dependency review is commented out for private repositories
   # Uncomment when repository is made public or GitHub Advanced Security is enabled
   # dependency-review:
