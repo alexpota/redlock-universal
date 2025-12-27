@@ -323,5 +323,178 @@ describe('LockManager Batch Acquisition Integration Tests', () => {
         expect(value3).toBeNull();
       });
     });
+
+    describe('retry behavior', () => {
+      it('should retry acquisition when key is temporarily locked', async () => {
+        const keys = [generateTestKey('retry-key-1'), generateTestKey('retry-key-2')];
+
+        // Acquire a blocking lock with short TTL
+        const blockingLock = await manager.acquireLock(keys[0]!, { ttl: 100 });
+
+        // Start batch acquisition that will retry
+        const acquirePromise = manager.acquireBatch(keys, {
+          retryAttempts: 5,
+          retryDelay: 50,
+        });
+
+        // Wait a bit, then release the blocking lock
+        await new Promise(resolve => setTimeout(resolve, 80));
+        await manager.releaseLock(blockingLock);
+
+        // Batch should eventually succeed after retry
+        const handles = await acquirePromise;
+
+        expect(handles).toHaveLength(2);
+        expect(handles[0]!.metadata?.attempts).toBeGreaterThan(1);
+
+        await manager.releaseBatch(handles);
+      });
+
+      it('should respect retryAttempts option and report correct attempt count', async () => {
+        const keys = [generateTestKey('retry-fail-1'), generateTestKey('retry-fail-2')];
+        const retryAttempts = 3;
+
+        // Acquire a blocking lock that won't be released
+        const blockingLock = await manager.acquireLock(keys[0]!);
+
+        try {
+          await manager.acquireBatch(keys, {
+            retryAttempts,
+            retryDelay: 20,
+          });
+          expect.fail('Should have thrown LockAcquisitionError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(LockAcquisitionError);
+          // Should report correct attempt count (retryAttempts + 1)
+          expect((error as LockAcquisitionError).attempts).toBe(retryAttempts + 1);
+          expect((error as LockAcquisitionError).key).toBe(keys.sort()[0]);
+        }
+
+        await manager.releaseLock(blockingLock);
+      });
+
+      it('should use manager defaults when no retry options provided', async () => {
+        const customManager = new LockManager({
+          nodes: [adapter],
+          defaultTTL: testTTL,
+          defaultRetryAttempts: 2,
+          defaultRetryDelay: 30,
+        });
+
+        const keys = [generateTestKey('defaults-1'), generateTestKey('defaults-2')];
+
+        // Acquire a blocking lock that won't be released
+        const blockingLock = await customManager.acquireLock(keys[0]!);
+
+        try {
+          await customManager.acquireBatch(keys);
+          expect.fail('Should have thrown LockAcquisitionError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(LockAcquisitionError);
+          // Should use manager's defaultRetryAttempts (2 + 1 = 3 total)
+          expect((error as LockAcquisitionError).attempts).toBe(3);
+        }
+
+        await customManager.releaseLock(blockingLock);
+      });
+
+      it('should override manager defaults with explicit options', async () => {
+        const customManager = new LockManager({
+          nodes: [adapter],
+          defaultTTL: testTTL,
+          defaultRetryAttempts: 5, // High default
+          defaultRetryDelay: 100,
+        });
+
+        const keys = [generateTestKey('override-1'), generateTestKey('override-2')];
+
+        // Acquire a blocking lock
+        const blockingLock = await customManager.acquireLock(keys[0]!);
+
+        try {
+          await customManager.acquireBatch(keys, {
+            retryAttempts: 1, // Override with lower value
+            retryDelay: 10,
+          });
+          expect.fail('Should have thrown LockAcquisitionError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(LockAcquisitionError);
+          // Should use explicit option, not manager default
+          expect((error as LockAcquisitionError).attempts).toBe(2); // 1 + 1
+        }
+
+        await customManager.releaseLock(blockingLock);
+      });
+
+      it('should not retry when retryAttempts is 0', async () => {
+        const keys = [generateTestKey('no-retry-1'), generateTestKey('no-retry-2')];
+
+        // Acquire a blocking lock
+        const blockingLock = await manager.acquireLock(keys[0]!);
+
+        const startTime = Date.now();
+        try {
+          await manager.acquireBatch(keys, {
+            retryAttempts: 0,
+            retryDelay: 100, // Would cause noticeable delay if retry happened
+          });
+          expect.fail('Should have thrown LockAcquisitionError');
+        } catch (error) {
+          expect(error).toBeInstanceOf(LockAcquisitionError);
+          expect((error as LockAcquisitionError).attempts).toBe(1);
+        }
+        const duration = Date.now() - startTime;
+
+        // Should fail immediately without retry delay
+        expect(duration).toBeLessThan(50);
+
+        await manager.releaseLock(blockingLock);
+      });
+
+      it('should include attempt count in successful handle metadata', async () => {
+        const keys = [generateTestKey('metadata-1'), generateTestKey('metadata-2')];
+
+        // First acquisition succeeds on first try
+        const handles = await manager.acquireBatch(keys, {
+          retryAttempts: 3,
+          retryDelay: 50,
+        });
+
+        expect(handles).toHaveLength(2);
+        // Should report 1 attempt when no retries needed
+        expect(handles[0]!.metadata?.attempts).toBe(1);
+        expect(handles[1]!.metadata?.attempts).toBe(1);
+
+        await manager.releaseBatch(handles);
+      });
+
+      it('should pass retry options through usingBatch', async () => {
+        const keys = [generateTestKey('using-retry-1'), generateTestKey('using-retry-2')];
+
+        // Acquire a blocking lock with very short TTL
+        const blockingLock = await manager.acquireLock(keys[0]!, { ttl: 80 });
+
+        // Start usingBatch that will retry
+        const result = await manager.usingBatch(
+          keys,
+          async () => {
+            return 'success';
+          },
+          {
+            retryAttempts: 5,
+            retryDelay: 50,
+          }
+        );
+
+        expect(result).toBe('success');
+
+        // Clean up blocking lock (may have already expired)
+        try {
+          await manager.releaseLock(blockingLock);
+        } catch {
+          // May have already expired
+        }
+      });
+    });
   });
 });

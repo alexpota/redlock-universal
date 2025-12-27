@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.7.5",
+  "version": "0.7.7",
   "description": "Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis clients",
   "keywords": [
     "redis",
