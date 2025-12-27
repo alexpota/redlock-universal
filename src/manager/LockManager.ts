@@ -218,6 +218,10 @@ export class LockManager {
    * All locks are acquired atomically using a Lua script - either all succeed or none do.
    * Redis guarantees that Lua scripts execute atomically without interruption.
    *
+   * **Retry Behavior:**
+   * When a key is already locked, acquireBatch will retry according to the configured
+   * retryAttempts and retryDelay options. This allows handling temporary lock contention.
+   *
    * **Example:**
    * ```typescript
    * // Input: ['user:3', 'user:1', 'user:2']
@@ -229,15 +233,19 @@ export class LockManager {
    * @param options - Acquisition options
    * @param options.ttl - Lock time-to-live in milliseconds (defaults to manager's defaultTTL)
    * @param options.nodeIndex - Redis node index to use (defaults to 0)
+   * @param options.retryAttempts - Number of retry attempts (defaults to manager's defaultRetryAttempts)
+   * @param options.retryDelay - Delay between retries in milliseconds (defaults to manager's defaultRetryDelay)
    * @returns Promise resolving to array of lock handles in SORTED key order
    * @throws {Error} If keys array is empty or contains duplicates
-   * @throws {LockAcquisitionError} If any key is already locked
+   * @throws {LockAcquisitionError} If any key is already locked after all retry attempts
    */
   async acquireBatch(
     keys: string[],
     options: {
       readonly ttl?: number;
       readonly nodeIndex?: number;
+      readonly retryAttempts?: number;
+      readonly retryDelay?: number;
     } = {}
   ): Promise<LockHandle[]> {
     if (keys.length === 0) {
@@ -261,6 +269,8 @@ export class LockManager {
 
     const adapter = this.config.nodes[nodeIndex]!;
     const ttl = options.ttl ?? this.config.defaultTTL;
+    const retryAttempts = options.retryAttempts ?? this.config.defaultRetryAttempts;
+    const retryDelay = options.retryDelay ?? this.config.defaultRetryDelay;
     const startTime = Date.now();
     const sortedKeys = [...keys].sort();
     const values = sortedKeys.map(() => generateLockValue());
@@ -273,81 +283,121 @@ export class LockManager {
         keys: sortedKeys.slice(0, 10), // Log first 10 to avoid huge logs
         ttl,
         nodeIndex,
+        retryAttempts,
+        retryDelay,
       });
     }
 
-    try {
-      const result = await adapter.batchSetNX(sortedKeys, values, ttl);
+    let lastError: Error | null = null;
+    let lastFailedKey: string | undefined;
+    let lastFailedIndex: number | undefined;
 
-      if (!result.success) {
-        this.stats.failedLocks += sortedKeys.length;
+    for (let attempt = 0; attempt <= retryAttempts; attempt++) {
+      try {
+        const result = await adapter.batchSetNX(sortedKeys, values, ttl);
 
-        if (this.config.logger) {
-          this.config.logger.error(
-            'Batch lock acquisition failed (atomic guarantee preserved)',
-            new Error('Lock acquisition failed'),
-            {
-              failedKey: result.failedKey,
-              failedIndex: result.failedIndex,
-              attemptedKeys: sortedKeys.length,
-              acquisitionTime: Date.now() - startTime,
-            }
-          );
+        if (result.success) {
+          const acquisitionTime = Date.now() - startTime;
+
+          const handles: LockHandle[] = sortedKeys.map((key, index) => ({
+            id: generateLockId(),
+            key,
+            value: values[index]!,
+            acquiredAt: Date.now(),
+            ttl,
+            metadata: {
+              attempts: attempt + 1,
+              acquisitionTime,
+              strategy: 'simple' as const,
+            },
+          }));
+
+          this.stats.acquisitionTimes.push(acquisitionTime);
+          this.stats.acquiredLocks += handles.length;
+          this.stats.activeLocks += handles.length;
+
+          for (const handle of handles) {
+            this.activeLocks.set(handle.id, handle);
+          }
+
+          if (this.config.logger) {
+            this.config.logger.info('Batch lock acquisition succeeded', {
+              lockCount: handles.length,
+              acquisitionTime,
+              avgTimePerLock: acquisitionTime / handles.length,
+              attempts: attempt + 1,
+            });
+          }
+
+          return handles;
         }
 
-        throw new LockAcquisitionError(
-          result.failedKey,
-          1,
-          new Error(
-            `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
-          )
+        // Acquisition failed - key is already locked
+        lastFailedKey = result.failedKey;
+        lastFailedIndex = result.failedIndex;
+        lastError = new Error(
+          `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
         );
-      }
 
-      const acquisitionTime = Date.now() - startTime;
-
-      const handles: LockHandle[] = sortedKeys.map((key, index) => ({
-        id: generateLockId(),
-        key,
-        value: values[index]!,
-        acquiredAt: startTime,
-        ttl,
-        metadata: {
-          attempts: 1,
-          acquisitionTime,
-          strategy: 'simple' as const,
-        },
-      }));
-
-      this.stats.acquisitionTimes.push(acquisitionTime);
-      this.stats.acquiredLocks += handles.length;
-      this.stats.activeLocks += handles.length;
-
-      for (const handle of handles) {
-        this.activeLocks.set(handle.id, handle);
-      }
-
-      if (this.config.logger) {
-        this.config.logger.info('Batch lock acquisition succeeded', {
-          lockCount: handles.length,
-          acquisitionTime,
-          avgTimePerLock: acquisitionTime / handles.length,
-        });
-      }
-
-      return handles;
-    } catch (error) {
-      if (!(error instanceof LockAcquisitionError)) {
-        this.stats.failedLocks += sortedKeys.length;
+        if (this.config.logger && attempt < retryAttempts) {
+          this.config.logger.debug?.('Batch lock acquisition attempt failed, retrying', {
+            attempt: attempt + 1,
+            maxAttempts: retryAttempts + 1,
+            failedKey: result.failedKey,
+            failedIndex: result.failedIndex,
+            retryDelay,
+          });
+        }
+      } catch (error) {
+        // Unexpected error (network, Redis, etc.)
+        lastError = error as Error;
+        lastFailedKey = sortedKeys[0];
+        lastFailedIndex = 0;
 
         if (this.config.logger && error instanceof Error) {
-          this.config.logger.error('Unexpected error during batch acquisition', error, {
+          this.config.logger.error('Unexpected error during batch acquisition attempt', error, {
+            attempt: attempt + 1,
+            maxAttempts: retryAttempts + 1,
             keyCount: sortedKeys.length,
           });
         }
       }
-      throw error;
+
+      // Wait before next retry (unless this was the last attempt)
+      if (attempt < retryAttempts) {
+        await this.sleep(retryDelay);
+      }
     }
+
+    // All retries exhausted
+    this.stats.failedLocks += sortedKeys.length;
+
+    if (this.config.logger) {
+      this.config.logger.error(
+        'Batch lock acquisition failed after all retries',
+        lastError ?? new Error('Lock acquisition failed'),
+        {
+          failedKey: lastFailedKey,
+          failedIndex: lastFailedIndex,
+          attemptedKeys: sortedKeys.length,
+          totalAttempts: retryAttempts + 1,
+          acquisitionTime: Date.now() - startTime,
+        }
+      );
+    }
+
+    throw new LockAcquisitionError(
+      lastFailedKey ?? sortedKeys[0]!,
+      retryAttempts + 1,
+      lastError ?? new Error('Lock acquisition failed')
+    );
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
@@ -380,6 +430,10 @@ export class LockManager {
    * @param keys - Array of lock keys to acquire
    * @param routine - Function to execute while holding all locks
    * @param options - Lock configuration options
+   * @param options.ttl - Lock time-to-live in milliseconds (defaults to manager's defaultTTL)
+   * @param options.nodeIndex - Redis node index to use (defaults to 0)
+   * @param options.retryAttempts - Number of retry attempts (defaults to manager's defaultRetryAttempts)
+   * @param options.retryDelay - Delay between retries in milliseconds (defaults to manager's defaultRetryDelay)
    * @returns Promise resolving to the routine result
    */
   async usingBatch<T>(
@@ -388,6 +442,8 @@ export class LockManager {
     options: {
       readonly ttl?: number;
       readonly nodeIndex?: number;
+      readonly retryAttempts?: number;
+      readonly retryDelay?: number;
     } = {}
   ): Promise<T> {
     const handles = await this.acquireBatch(keys, options);
