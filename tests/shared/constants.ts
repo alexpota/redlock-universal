@@ -201,6 +201,14 @@ export const REDIS_CONFIG = {
   IOREDIS_START_DB: 5,
 } as const;
 
+export const VALKEY_CONFIG = {
+  /** Default Valkey host */
+  DEFAULT_HOST: 'localhost',
+
+  /** Default Valkey port */
+  DEFAULT_PORT: 6390,
+} as const;
+
 export const TEST_PATTERNS = {
   /** Number of concurrent test attempts */
   CONCURRENT_ATTEMPTS: 5,
@@ -350,4 +358,27 @@ export function delay(ms: number): Promise<void> {
  */
 export function getRedisUrl(): string {
   return process.env.REDIS_URL || REDIS_CONFIG.DEFAULT_URL;
+}
+
+/**
+ * Get environment Valkey URL or default
+ */
+export function getValkeyUrl(): string {
+  const host = process.env.VALKEY_1_HOST || VALKEY_CONFIG.DEFAULT_HOST;
+  const port = process.env.VALKEY_1_PORT || VALKEY_CONFIG.DEFAULT_PORT;
+  return `redis://${host}:${port}`;
+}
+
+/**
+ * Get Valkey host from environment or default
+ */
+export function getValkeyHost(): string {
+  return process.env.VALKEY_1_HOST || VALKEY_CONFIG.DEFAULT_HOST;
+}
+
+/**
+ * Get Valkey port from environment or default
+ */
+export function getValkeyPort(): number {
+  return parseInt(process.env.VALKEY_1_PORT || String(VALKEY_CONFIG.DEFAULT_PORT), 10);
 }
