@@ -20,6 +20,10 @@ const REDIS_ERROR_NOSCRIPT = 'NOSCRIPT';
 
 const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
 
+// GLIDE-specific option constants
+const GLIDE_CONDITIONAL_SET_NX = 'onlyIfDoesNotExist' as const;
+const GLIDE_EXPIRY_TYPE_MS = 'PX' as const;
+
 /**
  * Interface representing a GLIDE client's method signatures.
  * GLIDE is Valkey's official client library.
@@ -52,6 +56,7 @@ export interface GlideClientLike {
  */
 export class GlideAdapter extends BaseAdapter {
   private readonly client: GlideClientLike;
+  private _isConnected = true;
 
   constructor(client: GlideClientLike, options: RedisAdapterOptions = {}) {
     super(options);
@@ -63,6 +68,20 @@ export class GlideAdapter extends BaseAdapter {
    */
   static from(client: GlideClientLike, options?: RedisAdapterOptions): GlideAdapter {
     return new GlideAdapter(client, options);
+  }
+
+  /**
+   * Normalize GlideString (string | Buffer) to string
+   * @private
+   */
+  private normalizeGlideString(value: unknown): string {
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (Buffer.isBuffer(value)) {
+      return value.toString('utf8');
+    }
+    return String(value);
   }
 
   /**
@@ -130,16 +149,15 @@ export class GlideAdapter extends BaseAdapter {
     try {
       const result = await this.withTimeout(
         this.client.set(prefixedKey, value, {
-          conditionalSet: 'onlyIfDoesNotExist',
-          expiry: { type: 'PX', count: ttl },
+          conditionalSet: GLIDE_CONDITIONAL_SET_NX,
+          expiry: { type: GLIDE_EXPIRY_TYPE_MS, count: ttl },
         })
       );
 
-      // GLIDE returns 'OK' | GlideString | null, normalize to string | null
       if (result === null) {
         return null;
       }
-      return typeof result === 'string' ? result : result.toString();
+      return this.normalizeGlideString(result);
     } catch (error) {
       throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
     }
@@ -152,11 +170,10 @@ export class GlideAdapter extends BaseAdapter {
 
     try {
       const result = await this.withTimeout(this.client.get(prefixedKey));
-      // GLIDE returns GlideString | null, normalize to string | null
       if (result === null) {
         return null;
       }
-      return typeof result === 'string' ? result : result.toString();
+      return this.normalizeGlideString(result);
     } catch (error) {
       throw new Error(`Failed to get key: ${(error as Error).message}`);
     }
@@ -276,16 +293,13 @@ export class GlideAdapter extends BaseAdapter {
   }
 
   isConnected(): boolean {
-    // GLIDE manages connection state internally and automatically reconnects
-    // Unlike ioredis, it doesn't expose a status property
-    // For simplicity, we assume connection is active if client exists
-    return true;
+    return this._isConnected;
   }
 
   async disconnect(): Promise<void> {
     try {
-      // Clear cached script SHAs on disconnect to prevent stale references
       this.scriptSHAs.clear();
+      this._isConnected = false;
       await this.client.close();
     } catch (error) {
       if (this.options.logger) {

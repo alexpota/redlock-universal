@@ -51,6 +51,19 @@ describe('GlideAdapter Unit Tests', () => {
       expect(result).toBeNull();
     });
 
+    it('should handle GlideString Buffer response correctly', async () => {
+      const bufferResponse = Buffer.from('OK');
+      mockClient.set.mockResolvedValue(bufferResponse);
+
+      const result = await adapter.setNX(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+        5000
+      );
+
+      expect(result).toBe('OK');
+    });
+
     it('should validate key format', async () => {
       await expect(adapter.setNX('', 'value', 1000)).rejects.toThrow(
         'Lock key must be a non-empty string'
@@ -72,6 +85,15 @@ describe('GlideAdapter Unit Tests', () => {
 
       expect(mockClient.get).toHaveBeenCalledWith(TEST_STRINGS.ADAPTER_TEST_KEY);
       expect(result).toBe(TEST_STRINGS.TEST_VALUE);
+    });
+
+    it('should handle GlideString Buffer type correctly', async () => {
+      const bufferValue = Buffer.from('test-value');
+      mockClient.get.mockResolvedValue(bufferValue);
+
+      const result = await adapter.get(TEST_STRINGS.ADAPTER_TEST_KEY);
+
+      expect(result).toBe('test-value');
     });
 
     it('should return null when key does not exist', async () => {
@@ -179,8 +201,14 @@ describe('GlideAdapter Unit Tests', () => {
   });
 
   describe('isConnected', () => {
-    it('should return true by default (GLIDE manages connection internally)', () => {
+    it('should return true when connected', () => {
       expect(adapter.isConnected()).toBe(true);
+    });
+
+    it('should return false after disconnect', async () => {
+      expect(adapter.isConnected()).toBe(true);
+      await adapter.disconnect();
+      expect(adapter.isConnected()).toBe(false);
     });
   });
 
