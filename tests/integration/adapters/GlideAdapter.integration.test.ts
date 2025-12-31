@@ -244,15 +244,13 @@ describe('GlideAdapter Integration Tests', () => {
       testKey = getTestKey();
     });
 
-    it('should extend when value matches and TTL below threshold', async () => {
-      await adapter.setNX(testKey, testValue, TEST_CONFIG.ULTRA_SHORT_TTL * 4);
-
-      await new Promise(resolve => setTimeout(resolve, TEST_CONFIG.ULTRA_SHORT_TTL * 2));
+    it('should extend when value matches and TTL above threshold', async () => {
+      await adapter.setNX(testKey, testValue, TEST_CONFIG.VERY_SHORT_TTL);
 
       const result = await adapter.atomicExtend(
         testKey,
         testValue,
-        TEST_CONFIG.ULTRA_SHORT_TTL * 3,
+        TEST_CONFIG.ULTRA_SHORT_TTL,
         testTTL
       );
       expect(result.resultCode).toBe(ATOMIC_EXTENSION_RESULT_CODES.SUCCESS);
