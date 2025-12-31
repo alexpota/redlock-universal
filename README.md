@@ -73,7 +73,7 @@ npm install @valkey/valkey-glide
 npm install redis ioredis
 ```
 
-> **Valkey Users:** See [docs/VALKEY.md](docs/VALKEY.md) for detailed Valkey setup guide.
+> **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
 
 ## Quick Start
 
