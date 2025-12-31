@@ -11,17 +11,27 @@ import {
 } from '../shared/constants.js';
 
 // Benchmark configuration
-const WARMUP_ITERATIONS = 20;
+const WARMUP_ITERATIONS = 50; // Increased for better JIT warmup
 const BENCHMARK_ITERATIONS = 200;
 const CONCURRENT_WORKERS = 10;
 const THROUGHPUT_DURATION_MS = 5000;
 const TTL = 2000;
+const COOLDOWN_MS = 500; // Cooldown between test configurations
+
+// Shared ioredis connection options for fair comparison
+const IOREDIS_BENCHMARK_OPTIONS = {
+  maxRetriesPerRequest: 3,
+  retryStrategy: (times: number) => Math.min(times * 50, 2000),
+  connectTimeout: 5000,
+  lazyConnect: true,
+} as const;
 
 /**
  * Performance statistics for benchmarking
  */
 interface PerformanceStats {
   mean: number;
+  stddev: number; // Standard deviation for reproducibility assessment
   p50: number;
   p95: number;
   p99: number;
@@ -49,15 +59,31 @@ interface ThroughputResult {
  */
 function calculateStats(times: number[]): PerformanceStats {
   if (times.length === 0) {
-    return { mean: 0, p50: 0, p95: 0, p99: 0, min: 0, max: 0, opsPerSec: 0, totalOps: 0 };
+    return {
+      mean: 0,
+      stddev: 0,
+      p50: 0,
+      p95: 0,
+      p99: 0,
+      min: 0,
+      max: 0,
+      opsPerSec: 0,
+      totalOps: 0,
+    };
   }
 
   const sorted = [...times].sort((a, b) => a - b);
   const sum = times.reduce((a, b) => a + b, 0);
   const mean = sum / times.length;
 
+  // Calculate standard deviation
+  const squaredDiffs = times.map(t => Math.pow(t - mean, 2));
+  const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / times.length;
+  const stddev = Math.sqrt(avgSquaredDiff);
+
   return {
     mean,
+    stddev,
     p50: sorted[Math.floor(times.length * 0.5)],
     p95: sorted[Math.floor(times.length * 0.95)],
     p99: sorted[Math.floor(times.length * 0.99)],
@@ -79,11 +105,11 @@ function formatMs(value: number, decimals = 3): string {
  * Print a formatted comparison table for latency benchmarks
  */
 function printLatencyTable(title: string, results: Record<string, PerformanceStats>): void {
-  console.log(`\n${'='.repeat(78)}`);
+  console.log(`\n${'='.repeat(90)}`);
   console.log(`  ${title}`);
-  console.log(`${'='.repeat(78)}`);
+  console.log(`${'='.repeat(90)}`);
   console.log(
-    `${'Configuration'.padEnd(22)} | ${'Mean'.padStart(8)} | ${'P50'.padStart(8)} | ${'P95'.padStart(8)} | ${'P99'.padStart(8)} | ${'Ops/s'.padStart(8)}`
+    `${'Configuration'.padEnd(22)} | ${'Mean'.padStart(8)} | ${'StdDev'.padStart(8)} | ${'P50'.padStart(8)} | ${'P95'.padStart(8)} | ${'Ops/s'.padStart(8)}`
   );
   console.log(
     `${'-'.repeat(22)}-+-${'-'.repeat(8)}-+-${'-'.repeat(8)}-+-${'-'.repeat(8)}-+-${'-'.repeat(8)}-+-${'-'.repeat(8)}`
@@ -91,11 +117,18 @@ function printLatencyTable(title: string, results: Record<string, PerformanceSta
 
   for (const [name, stats] of Object.entries(results)) {
     console.log(
-      `${name.padEnd(22)} | ${formatMs(stats.mean)}ms | ${formatMs(stats.p50)}ms | ${formatMs(stats.p95)}ms | ${formatMs(stats.p99)}ms | ${String(stats.opsPerSec).padStart(8)}`
+      `${name.padEnd(22)} | ${formatMs(stats.mean)}ms | ${formatMs(stats.stddev)}ms | ${formatMs(stats.p50)}ms | ${formatMs(stats.p95)}ms | ${String(stats.opsPerSec).padStart(8)}`
     );
   }
 
-  console.log(`${'='.repeat(78)}\n`);
+  // Add reproducibility assessment
+  const stddevs = Object.values(results).map(s => s.stddev / s.mean); // Coefficient of variation
+  const avgCV = stddevs.reduce((a, b) => a + b, 0) / stddevs.length;
+  console.log(`${'-'.repeat(90)}`);
+  console.log(
+    `  Reproducibility: ${avgCV < 0.2 ? '✅ Good' : avgCV < 0.4 ? '⚠️  Moderate' : '❌ High variance'} (avg CV: ${(avgCV * 100).toFixed(1)}%)`
+  );
+  console.log(`${'='.repeat(90)}\n`);
 }
 
 /**
@@ -129,7 +162,7 @@ function printComparisonSummary(
   valkeyResult: PerformanceStats | ThroughputResult,
   glideResult?: PerformanceStats | ThroughputResult
 ): void {
-  console.log('=== REDIS 7 vs VALKEY 8 COMPARISON ===\n');
+  console.log('=== REDIS vs VALKEY COMPARISON ===\n');
 
   // Determine if these are latency or throughput results
   const isLatency = 'mean' in redisResult && !('durationMs' in redisResult);
@@ -142,21 +175,19 @@ function printComparisonSummary(
     const latencyImprovement = ((redis.mean - valkey.mean) / redis.mean) * 100;
     const throughputImprovement = ((valkey.opsPerSec - redis.opsPerSec) / redis.opsPerSec) * 100;
 
-    console.log(`ioredis + Redis 7:  ${redis.mean.toFixed(3)}ms mean, ${redis.opsPerSec} ops/s`);
-    console.log(`ioredis + Valkey 8: ${valkey.mean.toFixed(3)}ms mean, ${valkey.opsPerSec} ops/s`);
+    console.log(`ioredis + Redis:  ${redis.mean.toFixed(3)}ms mean, ${redis.opsPerSec} ops/s`);
+    console.log(`ioredis + Valkey: ${valkey.mean.toFixed(3)}ms mean, ${valkey.opsPerSec} ops/s`);
 
     if (latencyImprovement > 0) {
-      console.log(`\n  --> Valkey 8 is ${latencyImprovement.toFixed(1)}% FASTER (latency)`);
-      console.log(`  --> Valkey 8 has ${throughputImprovement.toFixed(1)}% HIGHER throughput`);
+      console.log(`\n  --> Valkey is ${latencyImprovement.toFixed(1)}% FASTER (latency)`);
+      console.log(`  --> Valkey has ${throughputImprovement.toFixed(1)}% HIGHER throughput`);
     } else {
-      console.log(`\n  --> Redis 7 is ${(-latencyImprovement).toFixed(1)}% faster (latency)`);
+      console.log(`\n  --> Redis is ${(-latencyImprovement).toFixed(1)}% faster (latency)`);
     }
 
     if (glide) {
       const glideVsValkey = ((valkey.mean - glide.mean) / valkey.mean) * 100;
-      console.log(
-        `\nGLIDE + Valkey 8:   ${glide.mean.toFixed(3)}ms mean, ${glide.opsPerSec} ops/s`
-      );
+      console.log(`\nGLIDE + Valkey:   ${glide.mean.toFixed(3)}ms mean, ${glide.opsPerSec} ops/s`);
       if (glideVsValkey > 0) {
         console.log(`  --> GLIDE is ${glideVsValkey.toFixed(1)}% faster than ioredis on Valkey`);
       } else {
@@ -170,18 +201,18 @@ function printComparisonSummary(
 
     const throughputImprovement = ((valkey.opsPerSec - redis.opsPerSec) / redis.opsPerSec) * 100;
 
-    console.log(`ioredis + Redis 7:  ${Math.round(redis.opsPerSec)} ops/s`);
-    console.log(`ioredis + Valkey 8: ${Math.round(valkey.opsPerSec)} ops/s`);
+    console.log(`ioredis + Redis:  ${Math.round(redis.opsPerSec)} ops/s`);
+    console.log(`ioredis + Valkey: ${Math.round(valkey.opsPerSec)} ops/s`);
 
     if (throughputImprovement > 0) {
-      console.log(`\n  --> Valkey 8 has ${throughputImprovement.toFixed(1)}% HIGHER throughput`);
+      console.log(`\n  --> Valkey has ${throughputImprovement.toFixed(1)}% HIGHER throughput`);
     } else {
-      console.log(`\n  --> Redis 7 has ${(-throughputImprovement).toFixed(1)}% higher throughput`);
+      console.log(`\n  --> Redis has ${(-throughputImprovement).toFixed(1)}% higher throughput`);
     }
 
     if (glide) {
       const glideVsValkey = ((glide.opsPerSec - valkey.opsPerSec) / valkey.opsPerSec) * 100;
-      console.log(`\nGLIDE + Valkey 8:   ${Math.round(glide.opsPerSec)} ops/s`);
+      console.log(`\nGLIDE + Valkey:   ${Math.round(glide.opsPerSec)} ops/s`);
       if (glideVsValkey > 0) {
         console.log(`  --> GLIDE is ${glideVsValkey.toFixed(1)}% faster than ioredis on Valkey`);
       } else {
@@ -193,12 +224,12 @@ function printComparisonSummary(
   console.log('');
 }
 
-describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
-  // Redis 7 clients
+describe('Redis vs Valkey Performance Benchmark', () => {
+  // Redis clients
   let ioredisRedis: Redis;
   let ioredisRedisAdapter: IoredisAdapter;
 
-  // Valkey 8 clients
+  // Valkey clients
   let ioredisValkey: Redis;
   let ioredisValkeyAdapter: IoredisAdapter;
   let glideClient: GlideClient;
@@ -208,28 +239,44 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
   let valkeyAvailable = true;
 
   beforeAll(async () => {
-    console.log('\n=== SETUP: Connecting to Redis 7 and Valkey 8 ===\n');
+    console.log('\n=== SETUP: Connecting to Redis and Valkey ===\n');
+    console.log('Using identical connection settings for fair comparison.');
 
-    // Connect ioredis to Redis 7
+    // Parse Redis URL for host/port
     const redisUrl = getRedisUrl();
-    console.log(`Connecting ioredis to Redis 7 at ${redisUrl}...`);
-    ioredisRedis = new Redis(redisUrl);
-    ioredisRedisAdapter = new IoredisAdapter(ioredisRedis);
+    const redisUrlParsed = new URL(redisUrl);
+    const redisHost = redisUrlParsed.hostname;
+    const redisPort = parseInt(redisUrlParsed.port || '6379', 10);
 
-    // Connect ioredis to Valkey 8
+    // Connect ioredis to Redis with SAME settings as Valkey (fair comparison)
+    console.log(`Connecting ioredis to Redis at ${redisHost}:${redisPort}...`);
+    ioredisRedis = new Redis({
+      host: redisHost,
+      port: redisPort,
+      ...IOREDIS_BENCHMARK_OPTIONS,
+    });
+
+    // Suppress error events during connection attempt
+    ioredisRedis.on('error', () => {
+      // Silently ignore connection errors during setup
+    });
+
+    await ioredisRedis.connect();
+    await ioredisRedis.ping();
+    ioredisRedisAdapter = new IoredisAdapter(ioredisRedis);
+    console.log('ioredis connected to Redis successfully');
+
+    // Connect ioredis to Valkey with SAME settings (fair comparison)
     const valkeyHost = getValkeyHost();
     const valkeyPort = getValkeyPort();
     const valkeyUrl = `redis://${valkeyHost}:${valkeyPort}`;
 
     try {
-      console.log(`Connecting ioredis to Valkey 8 at ${valkeyUrl}...`);
+      console.log(`Connecting ioredis to Valkey at ${valkeyUrl}...`);
       ioredisValkey = new Redis({
         host: valkeyHost,
         port: valkeyPort,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null, // Don't retry on connection failure
-        connectTimeout: 2000, // 2 second connection timeout
-        lazyConnect: true,
+        ...IOREDIS_BENCHMARK_OPTIONS,
       });
 
       // Suppress error events during connection attempt
@@ -241,7 +288,7 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       await ioredisValkey.connect();
       await ioredisValkey.ping();
       ioredisValkeyAdapter = new IoredisAdapter(ioredisValkey);
-      console.log('ioredis connected to Valkey 8 successfully');
+      console.log('ioredis connected to Valkey successfully');
     } catch {
       valkeyAvailable = false;
       if (ioredisValkey) {
@@ -251,16 +298,16 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       console.warn('Valkey benchmarks will be skipped.\n');
     }
 
-    // Connect GLIDE to Valkey 8
+    // Connect GLIDE to Valkey
     if (valkeyAvailable) {
       try {
-        console.log(`Connecting GLIDE to Valkey 8 at ${valkeyHost}:${valkeyPort}...`);
+        console.log(`Connecting GLIDE to Valkey at ${valkeyHost}:${valkeyPort}...`);
         const glideConfig: GlideClientConfiguration = {
           addresses: [{ host: valkeyHost, port: valkeyPort }],
         };
         glideClient = await GlideClient.createClient(glideConfig);
         glideAdapter = new GlideAdapter(glideClient);
-        console.log('GLIDE connected to Valkey 8 successfully');
+        console.log('GLIDE connected to Valkey successfully');
       } catch {
         glideAvailable = false;
         console.warn('\nWARNING: GLIDE client not available');
@@ -270,12 +317,22 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       glideAvailable = false;
     }
 
-    // Verify server versions
+    // Verify server versions and store for labels
     console.log('\n--- Server Information ---');
+    let redisVersion = 'unknown';
+    let valkeyVersion = 'unknown';
+
     try {
       const redisInfo = await ioredisRedis.info('server');
-      const redisVersion = redisInfo.match(/redis_version:(\S+)/)?.[1] || 'unknown';
-      console.log(`Redis version: ${redisVersion}`);
+      redisVersion = redisInfo.match(/redis_version:(\S+)/)?.[1] || 'unknown';
+      const redisMajor = redisVersion.split('.')[0];
+      console.log(`Redis version: ${redisVersion} (major: ${redisMajor})`);
+
+      // Warn if version doesn't match expected
+      if (redisMajor !== '7') {
+        console.warn(`⚠️  WARNING: Expected Redis 7.x but got ${redisVersion}`);
+        console.warn(`   Labels will use actual detected version.`);
+      }
     } catch {
       console.log('Redis version: unable to determine');
     }
@@ -283,11 +340,12 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
     if (valkeyAvailable) {
       try {
         const valkeyInfo = await ioredisValkey.info('server');
-        const valkeyVersion =
+        valkeyVersion =
           valkeyInfo.match(/valkey_version:(\S+)/)?.[1] ||
           valkeyInfo.match(/redis_version:(\S+)/)?.[1] ||
           'unknown';
-        console.log(`Valkey version: ${valkeyVersion}`);
+        const valkeyMajor = valkeyVersion.split('.')[0];
+        console.log(`Valkey version: ${valkeyVersion} (major: ${valkeyMajor})`);
       } catch {
         console.log('Valkey version: unable to determine');
       }
@@ -311,22 +369,22 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
     }
 
     const results: Record<string, number[]> = {
-      'ioredis + Redis 7': [],
-      'ioredis + Valkey 8': [],
+      'ioredis + Redis': [],
+      'ioredis + Valkey': [],
     };
 
     if (glideAvailable) {
-      results['GLIDE + Valkey 8'] = [];
+      results['GLIDE + Valkey'] = [];
     }
 
     type AdapterEntry = [string, IoredisAdapter | GlideAdapter];
     const adapters: AdapterEntry[] = [
-      ['ioredis + Redis 7', ioredisRedisAdapter],
-      ['ioredis + Valkey 8', ioredisValkeyAdapter],
+      ['ioredis + Redis', ioredisRedisAdapter],
+      ['ioredis + Valkey', ioredisValkeyAdapter],
     ];
 
     if (glideAvailable && glideAdapter) {
-      adapters.push(['GLIDE + Valkey 8', glideAdapter]);
+      adapters.push(['GLIDE + Valkey', glideAdapter]);
     }
 
     console.log('\n--- Single Operation Latency Benchmark (setNX) ---');
@@ -343,8 +401,16 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       }
     }
 
-    // Benchmark each configuration
-    for (const [name, adapter] of adapters) {
+    // Benchmark each configuration with cooldown between them
+    for (let adapterIdx = 0; adapterIdx < adapters.length; adapterIdx++) {
+      const [name, adapter] = adapters[adapterIdx];
+
+      // Cooldown between configurations (not before first)
+      if (adapterIdx > 0) {
+        console.log(`Cooling down for ${COOLDOWN_MS}ms...`);
+        await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
+      }
+
       console.log(`Benchmarking ${name}...`);
 
       for (let i = 0; i < BENCHMARK_ITERATIONS; i++) {
@@ -366,9 +432,9 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
 
     printLatencyTable('setNX Single Operation Latency', stats);
     printComparisonSummary(
-      stats['ioredis + Redis 7'],
-      stats['ioredis + Valkey 8'],
-      glideAvailable ? stats['GLIDE + Valkey 8'] : undefined
+      stats['ioredis + Redis'],
+      stats['ioredis + Valkey'],
+      glideAvailable ? stats['GLIDE + Valkey'] : undefined
     );
 
     // Validation
@@ -384,22 +450,22 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
     }
 
     const results: Record<string, number[]> = {
-      'ioredis + Redis 7': [],
-      'ioredis + Valkey 8': [],
+      'ioredis + Redis': [],
+      'ioredis + Valkey': [],
     };
 
     if (glideAvailable) {
-      results['GLIDE + Valkey 8'] = [];
+      results['GLIDE + Valkey'] = [];
     }
 
     type AdapterEntry = [string, IoredisAdapter | GlideAdapter];
     const adapters: AdapterEntry[] = [
-      ['ioredis + Redis 7', ioredisRedisAdapter],
-      ['ioredis + Valkey 8', ioredisValkeyAdapter],
+      ['ioredis + Redis', ioredisRedisAdapter],
+      ['ioredis + Valkey', ioredisValkeyAdapter],
     ];
 
     if (glideAvailable && glideAdapter) {
-      adapters.push(['GLIDE + Valkey 8', glideAdapter]);
+      adapters.push(['GLIDE + Valkey', glideAdapter]);
     }
 
     console.log('\n--- Full Lock Cycle Latency Benchmark (setNX + delIfMatch) ---');
@@ -417,8 +483,16 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       }
     }
 
-    // Benchmark each configuration
-    for (const [name, adapter] of adapters) {
+    // Benchmark each configuration with cooldown between them
+    for (let adapterIdx = 0; adapterIdx < adapters.length; adapterIdx++) {
+      const [name, adapter] = adapters[adapterIdx];
+
+      // Cooldown between configurations (not before first)
+      if (adapterIdx > 0) {
+        console.log(`Cooling down for ${COOLDOWN_MS}ms...`);
+        await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
+      }
+
       console.log(`Benchmarking ${name}...`);
 
       for (let i = 0; i < BENCHMARK_ITERATIONS; i++) {
@@ -442,9 +516,9 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
 
     printLatencyTable('Full Lock Cycle Latency (setNX + Lua script)', stats);
     printComparisonSummary(
-      stats['ioredis + Redis 7'],
-      stats['ioredis + Valkey 8'],
-      glideAvailable ? stats['GLIDE + Valkey 8'] : undefined
+      stats['ioredis + Redis'],
+      stats['ioredis + Valkey'],
+      glideAvailable ? stats['GLIDE + Valkey'] : undefined
     );
 
     // Validation
@@ -537,18 +611,24 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
 
     const results: Record<string, ThroughputResult> = {};
 
-    // Test ioredis + Redis 7
-    console.log('Running ioredis + Redis 7...');
-    results['ioredis + Redis 7'] = await runThroughputTest(ioredisRedisAdapter, 'tp-redis');
+    // Test ioredis + Redis
+    console.log('Running ioredis + Redis...');
+    results['ioredis + Redis'] = await runThroughputTest(ioredisRedisAdapter, 'tp-redis');
 
-    // Test ioredis + Valkey 8
-    console.log('Running ioredis + Valkey 8...');
-    results['ioredis + Valkey 8'] = await runThroughputTest(ioredisValkeyAdapter, 'tp-valkey');
+    // Cooldown between configurations
+    console.log(`Cooling down for ${COOLDOWN_MS}ms...`);
+    await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
 
-    // Test GLIDE + Valkey 8
+    // Test ioredis + Valkey
+    console.log('Running ioredis + Valkey...');
+    results['ioredis + Valkey'] = await runThroughputTest(ioredisValkeyAdapter, 'tp-valkey');
+
+    // Test GLIDE + Valkey
     if (glideAvailable) {
-      console.log('Running GLIDE + Valkey 8...');
-      results['GLIDE + Valkey 8'] = await runThroughputTest(glideAdapter, 'tp-glide');
+      console.log(`Cooling down for ${COOLDOWN_MS}ms...`);
+      await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
+      console.log('Running GLIDE + Valkey...');
+      results['GLIDE + Valkey'] = await runThroughputTest(glideAdapter, 'tp-glide');
     }
 
     printThroughputTable(
@@ -556,9 +636,9 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
       results
     );
     printComparisonSummary(
-      results['ioredis + Redis 7'],
-      results['ioredis + Valkey 8'],
-      glideAvailable ? results['GLIDE + Valkey 8'] : undefined
+      results['ioredis + Redis'],
+      results['ioredis + Valkey'],
+      glideAvailable ? results['GLIDE + Valkey'] : undefined
     );
 
     // Validation: at least 100 ops/s with concurrent load
@@ -581,15 +661,18 @@ describe('Redis 7 vs Valkey 8 Performance Benchmark', () => {
     console.log('                    FINAL BENCHMARK SUMMARY');
     console.log('='.repeat(78));
     console.log('\nTest Configuration:');
-    console.log(`  - Redis 7 at: ${getRedisUrl()}`);
-    console.log(`  - Valkey 8 at: ${getValkeyHost()}:${getValkeyPort()}`);
+    console.log(`  - Redis at: ${getRedisUrl()}`);
+    console.log(`  - Valkey at: ${getValkeyHost()}:${getValkeyPort()}`);
     console.log(`  - GLIDE available: ${glideAvailable ? 'Yes' : 'No'}`);
     console.log(`  - Benchmark iterations: ${BENCHMARK_ITERATIONS}`);
+    console.log(`  - Warmup iterations: ${WARMUP_ITERATIONS}`);
+    console.log(`  - Cooldown between configs: ${COOLDOWN_MS}ms`);
     console.log(`  - Concurrent workers: ${CONCURRENT_WORKERS}`);
     console.log(`  - Throughput test duration: ${THROUGHPUT_DURATION_MS}ms`);
     console.log('\nConclusion:');
-    console.log('  See individual test results above for detailed Redis 7 vs Valkey 8 comparison.');
-    console.log('  GLIDE is the official Valkey client optimized for Valkey-specific features.\n');
+    console.log('  See individual test results above for detailed Redis vs Valkey comparison.');
+    console.log('  GLIDE is the official Valkey client optimized for Valkey-specific features.');
+    console.log('  StdDev values help assess benchmark reproducibility.\n');
     console.log(`${'='.repeat(78)}\n`);
 
     expect(true).toBe(true);
