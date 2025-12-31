@@ -23,19 +23,23 @@ const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
 /**
  * Interface representing a GLIDE client's method signatures.
  * GLIDE is Valkey's official client library.
+ *
+ * This interface uses `any` types for maximum compatibility with the actual
+ * GlideClient from @valkey/valkey-glide, which uses complex generic types
+ * like GlideString (string | Buffer) that vary based on the library version.
+ *
+ * Type safety is maintained at the adapter boundary - all inputs are validated
+ * and all outputs are normalized to standard string types.
  */
 export interface GlideClientLike {
-  set(
-    key: string,
-    value: string,
-    options?: {
-      conditionalSet?: 'onlyIfExists' | 'onlyIfDoesNotExist';
-      expiry?: { type: 'PX' | 'EX' | 'PXAT' | 'EXAT'; count: number };
-    }
-  ): Promise<string | null>;
-  get(key: string): Promise<string | null>;
-  del(keys: string[]): Promise<number>;
-  customCommand(args: string[]): Promise<unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  set(key: any, value: any, options?: any): Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get(key: any): Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  del(keys: any[]): Promise<number>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  customCommand(args: any[]): Promise<unknown>;
   close(): Promise<void> | void;
 }
 
@@ -131,7 +135,11 @@ export class GlideAdapter extends BaseAdapter {
         })
       );
 
-      return result;
+      // GLIDE returns 'OK' | GlideString | null, normalize to string | null
+      if (result === null) {
+        return null;
+      }
+      return typeof result === 'string' ? result : result.toString();
     } catch (error) {
       throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
     }
@@ -143,7 +151,12 @@ export class GlideAdapter extends BaseAdapter {
     const prefixedKey = this.prefixKey(key);
 
     try {
-      return await this.withTimeout(this.client.get(prefixedKey));
+      const result = await this.withTimeout(this.client.get(prefixedKey));
+      // GLIDE returns GlideString | null, normalize to string | null
+      if (result === null) {
+        return null;
+      }
+      return typeof result === 'string' ? result : result.toString();
     } catch (error) {
       throw new Error(`Failed to get key: ${(error as Error).message}`);
     }
