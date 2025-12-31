@@ -1,7 +1,7 @@
 {
   "name": "redlock-universal",
   "version": "0.7.7",
-  "description": "Production-ready distributed Redis locks for Node.js with support for both node-redis and ioredis clients",
+  "description": "Production-ready distributed locks for Redis and Valkey with support for node-redis, ioredis, and Valkey GLIDE",
   "keywords": [
     "redis",
     "redlock",
@@ -23,7 +23,10 @@
     "concurrency-control",
     "rate-limiting",
     "job-queue",
-    "multi-instance"
+    "multi-instance",
+    "valkey",
+    "valkey-lock",
+    "valkey-glide"
   ],
   "author": "Alex Potapenko <alex.potapenko.dev@gmail.com>",
   "license": "MIT",
@@ -98,10 +101,14 @@
     ]
   },
   "peerDependencies": {
+    "@valkey/valkey-glide": ">=2.0.0",
     "ioredis": ">=5.0.0",
     "redis": ">=4.0.0"
   },
   "peerDependenciesMeta": {
+    "@valkey/valkey-glide": {
+      "optional": true
+    },
     "redis": {
       "optional": true
     },
@@ -114,6 +121,7 @@
     "glob": "^10.5.0"
   },
   "devDependencies": {
+    "@valkey/valkey-glide": "^2.2.1",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@semantic-release/changelog": "^6.0.3",
