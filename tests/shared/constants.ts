@@ -381,14 +381,18 @@ export function getValkeyUrl(): string {
 
 /**
  * Get Valkey host from environment or default
+ * Checks VALKEY_HOST (CI) first, then VALKEY_1_HOST (local Docker)
  */
 export function getValkeyHost(): string {
-  return process.env.VALKEY_1_HOST || VALKEY_CONFIG.DEFAULT_HOST;
+  return process.env.VALKEY_HOST || process.env.VALKEY_1_HOST || VALKEY_CONFIG.DEFAULT_HOST;
 }
 
 /**
  * Get Valkey port from environment or default
+ * Checks VALKEY_PORT (CI) first, then VALKEY_1_PORT (local Docker)
  */
 export function getValkeyPort(): number {
-  return parseInt(process.env.VALKEY_1_PORT || String(VALKEY_CONFIG.DEFAULT_PORT), 10);
+  const port =
+    process.env.VALKEY_PORT || process.env.VALKEY_1_PORT || String(VALKEY_CONFIG.DEFAULT_PORT);
+  return parseInt(port, 10);
 }

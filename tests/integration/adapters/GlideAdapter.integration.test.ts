@@ -11,7 +11,10 @@ import {
   getValkeyPort,
 } from '../../shared/constants.js';
 
-describe('GlideAdapter Integration Tests', () => {
+// Only run GlideAdapter tests when testing against Valkey server
+const isValkeyServer = process.env.TEST_SERVER === 'valkey';
+
+describe.skipIf(!isValkeyServer)('GlideAdapter Integration Tests', () => {
   let glideClient: GlideClient;
   let adapter: RedisAdapter;
 
@@ -28,7 +31,9 @@ describe('GlideAdapter Integration Tests', () => {
   });
 
   afterAll(async () => {
-    await adapter.disconnect();
+    if (adapter) {
+      await adapter.disconnect();
+    }
   });
 
   describe('ping', () => {
