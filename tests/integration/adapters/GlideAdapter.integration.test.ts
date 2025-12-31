@@ -4,6 +4,8 @@ import { GlideAdapter } from '../../../src/adapters/index.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
 import {
   TEST_CONFIG,
+  ATOMIC_EXTENSION_RESULT_CODES,
+  TTL_VALUES,
   generateTestKey,
   getValkeyHost,
   getValkeyPort,
@@ -243,28 +245,41 @@ describe('GlideAdapter Integration Tests', () => {
     });
 
     it('should extend when value matches and TTL below threshold', async () => {
-      await adapter.setNX(testKey, testValue, 200); // Short TTL
+      await adapter.setNX(testKey, testValue, TEST_CONFIG.ULTRA_SHORT_TTL * 4);
 
-      // Wait for TTL to drop below threshold
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, TEST_CONFIG.ULTRA_SHORT_TTL * 2));
 
-      const result = await adapter.atomicExtend(testKey, testValue, 150, testTTL);
-      expect(result.extended).toBe(true);
-      expect(result.remainingTTL).toBeGreaterThan(0);
+      const result = await adapter.atomicExtend(
+        testKey,
+        testValue,
+        TEST_CONFIG.ULTRA_SHORT_TTL * 3,
+        testTTL
+      );
+      expect(result.resultCode).toBe(ATOMIC_EXTENSION_RESULT_CODES.SUCCESS);
+      expect(result.actualTTL).toBeGreaterThan(0);
     });
 
     it('should not extend when value does not match', async () => {
       await adapter.setNX(testKey, testValue, testTTL);
 
-      const result = await adapter.atomicExtend(testKey, 'wrong-value', 100, testTTL);
-      expect(result.extended).toBe(false);
-      expect(result.shouldAbort).toBe(true);
+      const result = await adapter.atomicExtend(
+        testKey,
+        'wrong-value',
+        TEST_CONFIG.ULTRA_SHORT_TTL * 2,
+        testTTL
+      );
+      expect(result.resultCode).toBe(ATOMIC_EXTENSION_RESULT_CODES.VALUE_MISMATCH);
     });
 
-    it('should return shouldAbort for non-existing key', async () => {
-      const result = await adapter.atomicExtend('non-existing-key', testValue, 100, testTTL);
-      expect(result.extended).toBe(false);
-      expect(result.shouldAbort).toBe(true);
+    it('should indicate key missing for non-existing key', async () => {
+      const result = await adapter.atomicExtend(
+        'non-existing-key',
+        testValue,
+        TEST_CONFIG.ULTRA_SHORT_TTL * 2,
+        testTTL
+      );
+      expect(result.resultCode).toBe(ATOMIC_EXTENSION_RESULT_CODES.VALUE_MISMATCH);
+      expect(result.actualTTL).toBe(TTL_VALUES.KEY_NOT_EXISTS);
     });
   });
 
@@ -276,7 +291,6 @@ describe('GlideAdapter Integration Tests', () => {
       const result = await adapter.batchSetNX(keys, values, testTTL);
       expect(result.success).toBe(true);
       expect(result.acquiredCount).toBe(3);
-      expect(result.failedKey).toBeNull();
 
       // Verify all keys were set
       for (let i = 0; i < keys.length; i++) {
@@ -294,7 +308,10 @@ describe('GlideAdapter Integration Tests', () => {
 
       const result = await adapter.batchSetNX(keys, values, testTTL);
       expect(result.success).toBe(false);
-      expect(result.failedKey).toBe(keys[1]);
+      expect(result.acquiredCount).toBe(0);
+      if (!result.success) {
+        expect(result.failedKey).toBe(keys[1]);
+      }
 
       // Verify none of the other keys were set (atomic rollback)
       const firstValue = await adapter.get(keys[0]);

@@ -339,6 +339,16 @@ export const TEST_DATA = {
   TRANSACTION_STEPS: ['begin', 'read', 'process', 'write', 'commit'] as const,
 } as const;
 
+export const ATOMIC_EXTENSION_RESULT_CODES = {
+  SUCCESS: 1,
+  TOO_LATE: 0,
+  VALUE_MISMATCH: -1,
+} as const;
+
+export const TTL_VALUES = {
+  KEY_NOT_EXISTS: -2,
+} as const;
+
 /**
  * Generate unique test key with timestamp and process ID
  */
