@@ -220,4 +220,16 @@ describe('GlideAdapter Unit Tests', () => {
       await expect(slowAdapter.get('key')).rejects.toThrow('Operation timed out after 100ms');
     });
   });
+
+  describe('factory method', () => {
+    it('should create adapter via from() static method', () => {
+      const newAdapter = GlideAdapter.from(mockClient);
+      expect(newAdapter).toBeInstanceOf(GlideAdapter);
+    });
+
+    it('should accept options via from() method', () => {
+      const newAdapter = GlideAdapter.from(mockClient, { keyPrefix: 'test:' });
+      expect(newAdapter).toBeInstanceOf(GlideAdapter);
+    });
+  });
 });
