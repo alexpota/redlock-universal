@@ -1,7 +1,7 @@
 # redlock-universal
 
-> Production-ready distributed Redis locks for Node.js with support for both
-> node-redis and ioredis
+> Production-ready distributed locks for Redis and Valkey with support for
+> node-redis, ioredis, and Valkey GLIDE
 
 [![npm version](https://img.shields.io/npm/v/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 [![Node.js](https://img.shields.io/node/v/redlock-universal.svg)](https://nodejs.org/)
@@ -38,6 +38,7 @@ lock extension capabilities.
 - 📊 **Enhanced Monitoring**: Built-in metrics, health checks, and structured
   logging
 - 🧪 **Tested**: 86%+ test coverage with 456 unit, integration, and E2E tests
+- 🔷 **Valkey Ready**: First-class support for Valkey 8+ with official GLIDE client adapter
 
 ## Table of Contents
 
@@ -65,9 +66,14 @@ npm install redis
 # For ioredis users
 npm install ioredis
 
+# For Valkey users (official GLIDE client)
+npm install @valkey/valkey-glide
+
 # Or both if you need mixed environments
 npm install redis ioredis
 ```
+
+> **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
 
 ## Quick Start
 
@@ -110,6 +116,27 @@ try {
 } catch (error) {
   console.error('Lock operation failed:', error);
 }
+```
+
+### With Valkey GLIDE
+
+```typescript
+import { GlideClient } from '@valkey/valkey-glide';
+import { createLock, GlideAdapter } from 'redlock-universal';
+
+// Setup Valkey GLIDE client
+const client = await GlideClient.createClient({
+  addresses: [{ host: 'localhost', port: 6379 }],
+});
+
+const adapter = new GlideAdapter(client);
+const lock = createLock({ adapter, key: 'my-resource', ttl: 30000 });
+
+// Automatic lock management with auto-extension
+const result = await lock.using(async (signal) => {
+  // Your critical section here
+  return await processData();
+});
 ```
 
 ### Distributed Lock (Multiple Redis Instances)

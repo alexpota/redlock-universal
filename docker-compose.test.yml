@@ -79,6 +79,22 @@ services:
     networks:
       - redlock-test
 
+  # Valkey instance for GLIDE adapter testing
+  valkey-1:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6390:6379"
+    command: valkey-server --appendonly yes
+    volumes:
+      - valkey-1-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - redlock-test
+
   # Test runner service
   test-runner:
     build:
@@ -95,6 +111,8 @@ services:
         condition: service_healthy
       redis-5:
         condition: service_healthy
+      valkey-1:
+        condition: service_healthy
     environment:
       - NODE_ENV=test
       - REDIS_1_HOST=redis-1
@@ -107,6 +125,8 @@ services:
       - REDIS_4_PORT=6379
       - REDIS_5_HOST=redis-5
       - REDIS_5_PORT=6379
+      - VALKEY_1_HOST=valkey-1
+      - VALKEY_1_PORT=6379
     volumes:
       - .:/app
       - /app/node_modules
@@ -120,6 +140,7 @@ volumes:
   redis-3-data:
   redis-4-data:
   redis-5-data:
+  valkey-1-data:
 
 networks:
   redlock-test:

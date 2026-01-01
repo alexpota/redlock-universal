@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🐳 Starting Redis Docker containers for integration tests..."
+echo "🐳 Starting Redis and Valkey Docker containers for integration tests..."
 
 # Detect docker compose command (newer versions use 'docker compose', older use 'docker-compose')
 if command -v docker-compose &> /dev/null; then
@@ -26,17 +26,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Start Redis containers
-echo "🚀 Starting Redis containers..."
-$DOCKER_COMPOSE -f docker-compose.test.yml up -d redis-1 redis-2 redis-3 redis-4 redis-5
+# Start Redis and Valkey containers
+echo "🚀 Starting Redis and Valkey containers..."
+$DOCKER_COMPOSE -f docker-compose.test.yml up -d redis-1 redis-2 redis-3 redis-4 redis-5 valkey-1
 
-# Wait for all Redis instances to be healthy
-echo "⏳ Waiting for Redis instances to be ready..."
+# Wait for all Redis and Valkey instances to be healthy
+echo "⏳ Waiting for Redis and Valkey instances to be ready..."
 for i in {1..30}; do
     if $DOCKER_COMPOSE -f docker-compose.test.yml ps | grep -q "healthy"; then
         healthy_count=$($DOCKER_COMPOSE -f docker-compose.test.yml ps | grep "healthy" | wc -l)
-        if [ "$healthy_count" -eq 5 ]; then
-            echo "✅ All Redis instances are healthy!"
+        if [ "$healthy_count" -eq 6 ]; then
+            echo "✅ All Redis and Valkey instances are healthy!"
             break
         fi
     fi
@@ -46,8 +46,8 @@ done
 
 # Check if all instances are healthy
 healthy_count=$($DOCKER_COMPOSE -f docker-compose.test.yml ps | grep "healthy" | wc -l)
-if [ "$healthy_count" -ne 5 ]; then
-    echo "❌ Not all Redis instances are healthy. Exiting..."
+if [ "$healthy_count" -ne 6 ]; then
+    echo "❌ Not all Redis and Valkey instances are healthy. Exiting..."
     $DOCKER_COMPOSE -f docker-compose.test.yml ps
     exit 1
 fi
@@ -65,6 +65,8 @@ export REDIS_4_HOST=localhost
 export REDIS_4_PORT=6382
 export REDIS_5_HOST=localhost
 export REDIS_5_PORT=6383
+export VALKEY_1_HOST=localhost
+export VALKEY_1_PORT=6390
 export NODE_ENV=test
 
 # Run integration tests

@@ -20,16 +20,16 @@ env:
 
 jobs:
   test:
-    name: Test Suite
+    name: Test (${{ matrix.server.name }}, Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    
+
     services:
-      redis:
-        image: redis:7-alpine
+      redis-server:
+        image: ${{ matrix.server.image }}
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd "${{ matrix.server.health-cmd }}"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -37,6 +37,14 @@ jobs:
     strategy:
       matrix:
         node-version: [22.x, 23.x]
+        server:
+          - name: redis
+            image: redis:7-alpine
+            health-cmd: redis-cli ping
+          - name: valkey
+            image: valkey/valkey:8-alpine
+            health-cmd: valkey-cli ping
+      fail-fast: false
 
     steps:
     - name: Checkout code
@@ -70,14 +78,17 @@ jobs:
       run: npm run test:integration
       env:
         NODE_ENV: test
+        TEST_SERVER: ${{ matrix.server.name }}
+        VALKEY_HOST: localhost
+        VALKEY_PORT: 6379
 
     - name: Test - Coverage
       run: npm run test:coverage
-      if: matrix.node-version == '22.x'
+      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
-      if: matrix.node-version == '22.x'
+      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
       with:
         fail_ci_if_error: false
 
