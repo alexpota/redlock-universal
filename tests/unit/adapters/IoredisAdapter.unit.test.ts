@@ -233,72 +233,54 @@ describe('IoredisAdapter Unit Tests', () => {
   });
 
   describe('Cluster client support', () => {
-    it('should accept a Cluster-like client', () => {
-      // Mock Cluster client (same API as Redis via Commander base class)
-      const mockClusterClient = {
-        set: vi.fn(),
-        get: vi.fn(),
-        del: vi.fn(),
-        eval: vi.fn(),
-        script: vi.fn(),
-        evalsha: vi.fn(),
-        ping: vi.fn(),
-        disconnect: vi.fn(),
-        status: 'ready',
-        // Cluster-specific property to distinguish from Redis
-        isCluster: true,
-      };
+    const createMockClusterClient = (overrides = {}) => ({
+      set: vi.fn().mockResolvedValue('OK'),
+      get: vi.fn().mockResolvedValue('test-value'),
+      del: vi.fn().mockResolvedValue(1),
+      eval: vi.fn(),
+      script: vi.fn().mockResolvedValue('mock-sha'),
+      evalsha: vi.fn().mockResolvedValue(1),
+      ping: vi.fn().mockResolvedValue('PONG'),
+      disconnect: vi.fn(),
+      status: 'ready' as string,
+      isCluster: true,
+      ...overrides,
+    });
 
-      // Should not throw - type accepts Cluster
+    it('should accept a Cluster-like client', () => {
+      const mockClusterClient = createMockClusterClient();
       const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
       expect(clusterAdapter).toBeInstanceOf(IoredisAdapter);
     });
 
     it('should perform operations with Cluster client', async () => {
-      const mockClusterClient = {
-        set: vi.fn().mockResolvedValue('OK'),
-        get: vi.fn().mockResolvedValue('test-value'),
-        del: vi.fn().mockResolvedValue(1),
-        script: vi.fn().mockResolvedValue('mock-sha'),
-        evalsha: vi.fn().mockResolvedValue(1),
-        ping: vi.fn().mockResolvedValue('PONG'),
-        disconnect: vi.fn(),
-        status: 'ready',
-        isCluster: true,
-      };
-
+      const mockClusterClient = createMockClusterClient();
       const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
 
-      // Test setNX
       const setResult = await clusterAdapter.setNX('cluster-key', 'value', 5000);
       expect(setResult).toBe('OK');
       expect(mockClusterClient.set).toHaveBeenCalledWith('cluster-key', 'value', 'PX', 5000, 'NX');
 
-      // Test get
       const getResult = await clusterAdapter.get('cluster-key');
       expect(getResult).toBe('test-value');
 
-      // Test ping
       const pingResult = await clusterAdapter.ping();
       expect(pingResult).toBe('PONG');
     });
 
     it('should check connection status for Cluster client', () => {
-      const mockClusterClient = {
-        set: vi.fn(),
-        get: vi.fn(),
-        del: vi.fn(),
-        ping: vi.fn(),
-        disconnect: vi.fn(),
-        status: 'ready',
-        isCluster: true,
-      };
-
+      const mockClusterClient = createMockClusterClient();
       const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
       expect(clusterAdapter.isConnected()).toBe(true);
 
       mockClusterClient.status = 'connecting';
       expect(clusterAdapter.isConnected()).toBe(false);
+    });
+
+    it('should return the Cluster client via getClient()', () => {
+      const mockClusterClient = createMockClusterClient();
+      const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
+      expect(clusterAdapter.getClient()).toBe(mockClusterClient);
     });
   });
 });

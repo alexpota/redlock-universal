@@ -353,7 +353,7 @@ async function main(): Promise<void> {
   printDecisionGuide();
 
   console.log('Note: These examples require actual Redis Cluster setup.');
-  console.log('See docker-compose.cluster.yml for local testing.\n');
+  console.log('See Redis documentation for cluster configuration.\n');
 
   // Uncomment to run when Redis clusters are available:
   // await singleClusterWithIoredis();
