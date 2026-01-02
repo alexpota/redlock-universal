@@ -191,6 +191,67 @@ try {
 }
 ```
 
+### Redis Cluster Support
+
+Both `ioredis.Cluster` and `node-redis` cluster clients are fully supported:
+
+#### With ioredis.Cluster
+
+```typescript
+import { Cluster } from 'ioredis';
+import { IoredisAdapter, createLock } from 'redlock-universal';
+
+const cluster = new Cluster([
+  { host: 'redis-node-1', port: 6379 },
+  { host: 'redis-node-2', port: 6379 },
+  { host: 'redis-node-3', port: 6379 },
+]);
+
+// IoredisAdapter accepts both Redis and Cluster types
+const adapter = new IoredisAdapter(cluster);
+const lock = createLock({ adapter, key: 'resource', ttl: 30000 });
+
+await lock.using(async (signal) => {
+  // Critical section with cluster HA
+});
+
+cluster.disconnect();
+```
+
+#### With node-redis Cluster
+
+```typescript
+import { createCluster } from 'redis';
+import { NodeRedisAdapter, createLock } from 'redlock-universal';
+
+const cluster = createCluster({
+  rootNodes: [
+    { url: 'redis://redis-node-1:6379' },
+    { url: 'redis://redis-node-2:6379' },
+  ],
+});
+await cluster.connect();
+
+const adapter = new NodeRedisAdapter(cluster);
+const lock = createLock({ adapter, key: 'resource', ttl: 30000 });
+```
+
+#### Understanding Cluster vs Redlock
+
+> **Important:** Redis Cluster and the Redlock algorithm serve different purposes.
+
+| Aspect | Single Redis Cluster | Multiple Independent Instances (Redlock) |
+|--------|---------------------|------------------------------------------|
+| **Purpose** | HA via replication + sharding | Distributed consensus across failure domains |
+| **Fault tolerance** | Survives node failures within cluster | Survives arbitrary node/network failures |
+| **Consistency** | Eventual (during failover) | Quorum-based consensus |
+| **Complexity** | Simpler | More infrastructure |
+| **Best for** | Most applications | Safety-critical systems |
+
+**Recommendation:** For most applications, a single Redis Cluster provides sufficient high availability. For safety-critical systems where lock correctness is paramount, use multiple independent Redis instances with Redlock.
+
+See [`examples/redis-cluster-usage.ts`](./examples/redis-cluster-usage.ts) for detailed examples.
+
 ## Core Concepts
 
 ### Configuration Constants
