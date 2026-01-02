@@ -1,4 +1,4 @@
-import type { Redis } from 'ioredis';
+import type { Redis, Cluster } from 'ioredis';
 import type {
   RedisAdapterOptions,
   AtomicExtensionResult,
@@ -16,6 +16,8 @@ import {
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
 
+type IoredisClient = Redis | Cluster;
+
 // Redis command constants
 const REDIS_STATUS_READY = 'ready';
 const REDIS_ERROR_NOSCRIPT = 'NOSCRIPT';
@@ -24,12 +26,12 @@ const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
 
 /**
  * Redis adapter for ioredis v5+ clients.
- * Provides unified interface for ioredis specific operations.
+ * Supports both standalone Redis and Redis Cluster connections.
  */
 export class IoredisAdapter extends BaseAdapter {
-  private readonly client: Redis;
+  private readonly client: IoredisClient;
 
-  constructor(client: Redis, options: RedisAdapterOptions = {}) {
+  constructor(client: IoredisClient, options: RedisAdapterOptions = {}) {
     super(options);
     this.client = client;
   }
@@ -37,7 +39,7 @@ export class IoredisAdapter extends BaseAdapter {
   /**
    * Factory method to create adapter from client
    */
-  static from(client: Redis, options?: RedisAdapterOptions): IoredisAdapter {
+  static from(client: IoredisClient, options?: RedisAdapterOptions): IoredisAdapter {
     return new IoredisAdapter(client, options);
   }
 
@@ -251,7 +253,7 @@ export class IoredisAdapter extends BaseAdapter {
   /**
    * Get the underlying ioredis client (for advanced usage)
    */
-  getClient(): Redis {
+  getClient(): IoredisClient {
     return this.client;
   }
 }

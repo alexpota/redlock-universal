@@ -231,4 +231,56 @@ describe('IoredisAdapter Unit Tests', () => {
       await expect(slowAdapter.get('key')).rejects.toThrow('Operation timed out after 100ms');
     });
   });
+
+  describe('Cluster client support', () => {
+    const createMockClusterClient = (overrides = {}) => ({
+      set: vi.fn().mockResolvedValue('OK'),
+      get: vi.fn().mockResolvedValue('test-value'),
+      del: vi.fn().mockResolvedValue(1),
+      eval: vi.fn(),
+      script: vi.fn().mockResolvedValue('mock-sha'),
+      evalsha: vi.fn().mockResolvedValue(1),
+      ping: vi.fn().mockResolvedValue('PONG'),
+      disconnect: vi.fn(),
+      status: 'ready' as string,
+      isCluster: true,
+      ...overrides,
+    });
+
+    it('should accept a Cluster-like client', () => {
+      const mockClusterClient = createMockClusterClient();
+      const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
+      expect(clusterAdapter).toBeInstanceOf(IoredisAdapter);
+    });
+
+    it('should perform operations with Cluster client', async () => {
+      const mockClusterClient = createMockClusterClient();
+      const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
+
+      const setResult = await clusterAdapter.setNX('cluster-key', 'value', 5000);
+      expect(setResult).toBe('OK');
+      expect(mockClusterClient.set).toHaveBeenCalledWith('cluster-key', 'value', 'PX', 5000, 'NX');
+
+      const getResult = await clusterAdapter.get('cluster-key');
+      expect(getResult).toBe('test-value');
+
+      const pingResult = await clusterAdapter.ping();
+      expect(pingResult).toBe('PONG');
+    });
+
+    it('should check connection status for Cluster client', () => {
+      const mockClusterClient = createMockClusterClient();
+      const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
+      expect(clusterAdapter.isConnected()).toBe(true);
+
+      mockClusterClient.status = 'connecting';
+      expect(clusterAdapter.isConnected()).toBe(false);
+    });
+
+    it('should return the Cluster client via getClient()', () => {
+      const mockClusterClient = createMockClusterClient();
+      const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
+      expect(clusterAdapter.getClient()).toBe(mockClusterClient);
+    });
+  });
 });
