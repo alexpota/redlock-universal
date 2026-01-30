@@ -347,7 +347,7 @@ export class RedLock implements Lock {
 
       // Consider locked if quorum of nodes have the key
       return lockedNodes >= this.config.quorum;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }

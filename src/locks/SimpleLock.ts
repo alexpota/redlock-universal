@@ -300,7 +300,7 @@ export class SimpleLock implements Lock {
     try {
       const value = await this.adapter.get(key);
       return value !== null;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }

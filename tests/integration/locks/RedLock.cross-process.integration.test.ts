@@ -174,7 +174,7 @@ main().catch(console.error);
         child.on('close', code => {
           try {
             unlinkSync(scriptPath);
-          } catch (error) {
+          } catch (_error) {
             // Ignore cleanup errors
           }
 
@@ -188,7 +188,7 @@ main().catch(console.error);
         child.on('error', error => {
           try {
             unlinkSync(scriptPath);
-          } catch (cleanupError) {
+          } catch (_cleanupError) {
             // Ignore cleanup errors
           }
           reject(error);
@@ -220,7 +220,7 @@ main().catch(console.error);
             .map(line => {
               try {
                 return JSON.parse(line);
-              } catch (error) {
+              } catch (_error) {
                 return null;
               }
             })
@@ -277,7 +277,7 @@ main().catch(console.error);
               .map(line => {
                 try {
                   return JSON.parse(line);
-                } catch (error) {
+                } catch (_error) {
                   return null;
                 }
               })
@@ -325,7 +325,7 @@ main().catch(console.error);
             .map(line => {
               try {
                 return JSON.parse(line);
-              } catch (error) {
+              } catch (_error) {
                 return null;
               }
             })
@@ -388,7 +388,7 @@ main().catch(console.error);
           .map(line => {
             try {
               return JSON.parse(line);
-            } catch (error) {
+            } catch (_error) {
               return null;
             }
           })
@@ -483,7 +483,7 @@ main().catch(console.error);
         // Clean up script file
         try {
           unlinkSync(scriptPath);
-        } catch (error) {
+        } catch (_error) {
           // Ignore cleanup errors
         }
 
@@ -494,7 +494,7 @@ main().catch(console.error);
           .map(line => {
             try {
               return JSON.parse(line);
-            } catch (error) {
+            } catch (_error) {
               return null;
             }
           })
@@ -609,7 +609,7 @@ main().catch(console.error);
             .map(line => {
               try {
                 return JSON.parse(line);
-              } catch (error) {
+              } catch (_error) {
                 return null;
               }
             })
