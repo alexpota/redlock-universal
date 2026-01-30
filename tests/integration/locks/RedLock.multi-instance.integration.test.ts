@@ -54,7 +54,7 @@ describe('RedLock Multi-Instance Validation', () => {
           if (client.isReady) {
             await client.disconnect();
           }
-        } catch (error) {
+        } catch (_error) {
           // Ignore disconnect errors during cleanup
         }
       })
@@ -120,7 +120,7 @@ describe('RedLock Multi-Instance Validation', () => {
             if (client.isReady) {
               await client.disconnect();
             }
-          } catch (error) {
+          } catch (_error) {
             // Ignore disconnect errors
           }
         })
@@ -158,7 +158,7 @@ describe('RedLock Multi-Instance Validation', () => {
           if (!failingInstances[i].isReady) {
             await failingInstances[i].connect();
           }
-        } catch (error) {
+        } catch (_error) {
           // Ignore reconnect errors
         }
       }
@@ -178,7 +178,7 @@ describe('RedLock Multi-Instance Validation', () => {
             if (client.isReady) {
               await client.disconnect();
             }
-          } catch (error) {
+          } catch (_error) {
             // Ignore disconnect errors
           }
         })
@@ -202,7 +202,7 @@ describe('RedLock Multi-Instance Validation', () => {
           if (!failingInstances[i].isReady) {
             await failingInstances[i].connect();
           }
-        } catch (error) {
+        } catch (_error) {
           // Ignore reconnect errors
         }
       }

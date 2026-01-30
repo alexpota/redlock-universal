@@ -317,7 +317,7 @@ describe('RedLock Network Partition Simulation', () => {
       // Clean up (might fail due to partition, but that's expected)
       try {
         await redlock.release(handle);
-      } catch (error) {
+      } catch (_error) {
         // Expected due to partition
       }
     });
