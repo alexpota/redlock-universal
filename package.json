@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Production-ready distributed locks for Redis and Valkey with support for node-redis, ioredis, and Valkey GLIDE",
   "keywords": [
     "redis",

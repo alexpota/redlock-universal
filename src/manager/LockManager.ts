@@ -191,6 +191,18 @@ export class LockManager {
   }
 
   /**
+   * Extend the TTL of a tracked lock
+   */
+  async extendLock(handle: LockHandle, ttl: number): Promise<boolean> {
+    const lock =
+      handle.metadata?.strategy === 'redlock'
+        ? this.createRedLock(handle.key)
+        : this.createSimpleLock(handle.key);
+
+    return lock.extend(handle, ttl);
+  }
+
+  /**
    * Release a tracked lock
    */
   async releaseLock(handle: LockHandle): Promise<boolean> {

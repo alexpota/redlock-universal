@@ -178,8 +178,8 @@ describe('LockManager', () => {
     });
   });
 
-  describe('acquireLock and releaseLock', () => {
-    it('should acquire and release simple lock', async () => {
+  describe('acquireLock, extendLock, and releaseLock', () => {
+    it('should acquire, extend, and release simple lock', async () => {
       const adapter = new MockRedisAdapter();
       const manager = new LockManager({ nodes: [adapter] });
 
@@ -192,6 +192,9 @@ describe('LockManager', () => {
       expect(stats.activeLocks).toBe(1);
       expect(stats.acquiredLocks).toBe(1);
 
+      const extended = await manager.extendLock(handle, 100);
+      expect(extended).toBe(true);
+
       const released = await manager.releaseLock(handle);
       expect(released).toBe(true);
 
@@ -199,7 +202,7 @@ describe('LockManager', () => {
       expect(finalStats.activeLocks).toBe(0);
     });
 
-    it('should acquire and release RedLock', async () => {
+    it('should acquire, extend, and release RedLock', async () => {
       const adapters = [
         new MockRedisAdapter('node1'),
         new MockRedisAdapter('node2'),
@@ -211,8 +214,14 @@ describe('LockManager', () => {
       expect(handle).toBeDefined();
       expect(handle.key).toBe('test-key');
 
+      const extended = await manager.extendLock(handle, 100);
+      expect(extended).toBe(true);
+
       const released = await manager.releaseLock(handle);
       expect(released).toBe(true);
+
+      const finalStats = manager.getStats();
+      expect(finalStats.activeLocks).toBe(0);
     });
 
     it('should track failed lock attempts', async () => {
