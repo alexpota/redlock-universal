@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Production-ready distributed locks for Redis and Valkey with support for node-redis, ioredis, and Valkey GLIDE",
   "keywords": [
     "redis",
@@ -122,7 +122,14 @@
     "tmp": "^0.2.4",
     "glob": "^10.5.0",
     "lodash": "^4.17.23",
-    "undici": "^6.23.0"
+    "undici": "^6.23.0",
+    "minimatch": ">=9.0.7",
+    "markdown-it": ">=14.1.1",
+    "npm": "^11.11.0",
+    "rollup": ">=4.59.0",
+    "@commitlint/config-validator": {
+      "ajv": "^8.18.0"
+    }
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
