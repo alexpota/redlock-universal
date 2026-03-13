@@ -15,7 +15,7 @@ function stopRedis(): void {
 }
 
 function startRedis(): void {
-  execSync('docker compose -f docker-compose.test.yml start redis-2', {
+  execSync('docker compose -f docker-compose.test.yml up -d redis-2', {
     stdio: 'pipe',
     timeout: 10000,
   });

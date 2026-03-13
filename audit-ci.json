@@ -1,14 +1,5 @@
 {
   "high": true,
   "moderate": true,
-  "allowlist": [
-    "GHSA-qffp-2rhf-9h96",
-    "GHSA-7r86-cg39-jmmj",
-    "GHSA-23c5-xmqv-rm74"
-  ],
-  "_comments": {
-    "GHSA-qffp-2rhf-9h96": "tar@7.5.9 drive-relative linkpath traversal. Bundled in npm@11.11.0 via semantic-release. Fix requires tar@7.5.10 — no npm release includes it yet (released March 4, 2026). Dev-only; Windows-specific; no untrusted tarballs extracted.",
-    "GHSA-7r86-cg39-jmmj": "minimatch@10.2.2 ReDoS via GLOBSTAR. Bundled in npm@11.11.0. Fix requires minimatch@10.2.3. Override >=9.0.7 fixes non-bundled instances. Dev-only.",
-    "GHSA-23c5-xmqv-rm74": "minimatch@10.2.2 ReDoS via extglobs. Same as GHSA-7r86-cg39-jmmj. Dev-only."
-  }
+  "allowlist": []
 }
