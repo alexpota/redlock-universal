@@ -423,4 +423,230 @@ describe('SimpleLock Unit Tests', () => {
       });
     });
   });
+
+  describe('circuit breaker', () => {
+    it('should stay closed when failures are below threshold', async () => {
+      const cbLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+      });
+
+      // Fail 4 times (below default threshold of 5)
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+      for (let i = 0; i < 4; i++) {
+        await expect(cbLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      }
+
+      // 5th attempt should succeed (breaker still closed)
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+      const handle = await cbLock.acquire();
+
+      expect(handle).toMatchObject({ key: 'test-lock' });
+      expect(cbLock.getHealth().circuitBreaker.state).toBe('closed');
+    });
+
+    it('should open after reaching failure threshold', async () => {
+      const cbLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+      });
+
+      // Fail 5 times to trip the breaker
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+      for (let i = 0; i < 5; i++) {
+        await expect(cbLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      }
+
+      expect(cbLock.getHealth().circuitBreaker.state).toBe('open');
+
+      // Next acquire should throw circuit breaker error without calling setNX
+      mockAdapter.setNX = vi.fn();
+
+      await expect(cbLock.acquire()).rejects.toThrow('Circuit breaker is open');
+      expect(mockAdapter.setNX).not.toHaveBeenCalled();
+    });
+
+    it('should transition to half-open after resetTimeout expires', async () => {
+      vi.useFakeTimers();
+      try {
+        const cbLock = new SimpleLock({
+          adapter: mockAdapter,
+          key: 'test-lock',
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          retryAttempts: 0,
+        });
+
+        // Trip the breaker with 5 failures
+        mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+        for (let i = 0; i < 5; i++) {
+          await cbLock.acquire().catch(() => {});
+        }
+
+        expect(cbLock.getHealth().circuitBreaker.state).toBe('open');
+
+        // Advance past the default 60000ms resetTimeout
+        vi.advanceTimersByTime(60001);
+
+        // Set up mocks for successful probe
+        mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
+
+        const handle = await cbLock.acquire();
+
+        expect(handle).toMatchObject({ key: 'test-lock' });
+        expect(cbLock.getHealth().circuitBreaker.state).toBe('closed');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should re-open if probe fails in half-open state', async () => {
+      vi.useFakeTimers();
+      try {
+        const cbLock = new SimpleLock({
+          adapter: mockAdapter,
+          key: 'test-lock',
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          retryAttempts: 0,
+        });
+
+        // Trip the breaker with 5 failures
+        mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+        for (let i = 0; i < 5; i++) {
+          await cbLock.acquire().catch(() => {});
+        }
+
+        expect(cbLock.getHealth().circuitBreaker.state).toBe('open');
+
+        // Advance past resetTimeout
+        vi.advanceTimersByTime(60001);
+
+        // Keep setNX and ping rejecting
+        mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis still down'));
+        mockAdapter.ping = vi.fn().mockRejectedValue(new Error('Redis still down'));
+
+        // Should throw LockAcquisitionError (the actual Redis error, not circuit breaker message)
+        await expect(cbLock.acquire()).rejects.toThrow(LockAcquisitionError);
+
+        expect(cbLock.getHealth().circuitBreaker.state).toBe('open');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reset failure counter on success', async () => {
+      // Use default lock which has retryAttempts: 3
+      // Fail 3 times then succeed on 4th call
+      mockAdapter.setNX = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Redis error'))
+        .mockRejectedValueOnce(new Error('Redis error'))
+        .mockRejectedValueOnce(new Error('Redis error'))
+        .mockResolvedValueOnce('OK');
+
+      const handle = await lock.acquire();
+
+      expect(handle).toMatchObject({ key: 'test-lock' });
+      expect(lock.getHealth().circuitBreaker.failures).toBe(0);
+      expect(lock.getHealth().circuitBreaker.state).toBe('closed');
+    });
+
+    it('should reflect breaker state via getHealth()', () => {
+      const health = lock.getHealth();
+
+      expect(health.circuitBreaker.state).toBe('closed');
+      expect(health.circuitBreaker.failures).toBe(0);
+      expect(health.circuitBreaker.openedAt).toBe(0);
+    });
+
+    it('should not trip when circuitBreaker is disabled', async () => {
+      const disabledLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+        circuitBreaker: false,
+      });
+
+      // Fail 10 times (well past default threshold)
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+      for (let i = 0; i < 10; i++) {
+        await expect(disabledLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      }
+
+      // Should still succeed (breaker never tripped)
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+      const handle = await disabledLock.acquire();
+
+      expect(handle).toMatchObject({ key: 'test-lock' });
+    });
+
+    it('should respect custom failureThreshold', async () => {
+      const customLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+        circuitBreaker: { failureThreshold: 2 },
+      });
+
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+      // First failure — should still be closed
+      await expect(customLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      expect(customLock.getHealth().circuitBreaker.state).toBe('closed');
+
+      // Second failure — should open
+      await expect(customLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      expect(customLock.getHealth().circuitBreaker.state).toBe('open');
+    });
+
+    it('should respect custom resetTimeout', async () => {
+      vi.useFakeTimers();
+      try {
+        const customLock = new SimpleLock({
+          adapter: mockAdapter,
+          key: 'test-lock',
+          ttl: TEST_CONFIG.DEFAULT_TTL,
+          retryAttempts: 0,
+          circuitBreaker: { failureThreshold: 2, resetTimeout: 5000 },
+        });
+
+        // Trip the breaker with 2 failures
+        mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis error'));
+
+        for (let i = 0; i < 2; i++) {
+          await customLock.acquire().catch(() => {});
+        }
+
+        expect(customLock.getHealth().circuitBreaker.state).toBe('open');
+
+        // Advance 3000ms — should still be open
+        vi.advanceTimersByTime(3000);
+        await expect(customLock.acquire()).rejects.toThrow('Circuit breaker is open');
+
+        // Advance 2001ms more (total 5001ms past opening)
+        vi.advanceTimersByTime(2001);
+
+        mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
+
+        const handle = await customLock.acquire();
+
+        expect(handle).toMatchObject({ key: 'test-lock' });
+        expect(customLock.getHealth().circuitBreaker.state).toBe('closed');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

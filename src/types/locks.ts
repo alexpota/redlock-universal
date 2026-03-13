@@ -48,6 +48,18 @@ export interface LockMetadata {
 }
 
 /**
+ * Configuration for the circuit breaker in SimpleLock
+ */
+export interface CircuitBreakerConfig {
+  /** Consecutive failures before opening the circuit (default: 5) */
+  readonly failureThreshold?: number;
+  /** Time in ms before probing after circuit opens (default: 60000) */
+  readonly resetTimeout?: number;
+  /** Health check interval in ms (default: 30000) */
+  readonly healthCheckInterval?: number;
+}
+
+/**
  * Configuration for simple (single-instance) locks
  */
 export interface SimpleLockConfig {
@@ -68,6 +80,9 @@ export interface SimpleLockConfig {
 
   /** Optional logger for structured logging (default: none) */
   readonly logger?: ILogger;
+
+  /** Circuit breaker configuration (default: enabled with default thresholds) */
+  readonly circuitBreaker?: boolean | CircuitBreakerConfig;
 }
 
 /**

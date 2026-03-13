@@ -1,5 +1,5 @@
 import type { RedisAdapter } from './types/adapters.js';
-import type { Lock, SimpleLockConfig, RedLockConfig } from './types/locks.js';
+import type { Lock, SimpleLockConfig, RedLockConfig, CircuitBreakerConfig } from './types/locks.js';
 import type { ILogger } from './monitoring/Logger.js';
 import { SimpleLock } from './locks/SimpleLock.js';
 import { LeanSimpleLock } from './locks/LeanSimpleLock.js';
@@ -24,6 +24,8 @@ export interface CreateLockConfig {
   readonly performance?: 'standard' | 'lean' | 'enterprise';
   /** Optional logger for structured logging (default: none) */
   readonly logger?: ILogger;
+  /** Circuit breaker configuration (default: enabled). Ignored in 'lean' mode. */
+  readonly circuitBreaker?: boolean | CircuitBreakerConfig;
 }
 
 /**
@@ -52,6 +54,7 @@ export function createLock(config: CreateLockConfig): Lock {
     ...(config.retryAttempts !== undefined && { retryAttempts: config.retryAttempts }),
     ...(config.retryDelay !== undefined && { retryDelay: config.retryDelay }),
     ...(config.logger !== undefined && { logger: config.logger }),
+    ...(config.circuitBreaker !== undefined && { circuitBreaker: config.circuitBreaker }),
   };
 
   const performance = config.performance ?? 'standard';
