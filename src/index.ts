@@ -14,7 +14,13 @@ export {
 export type { CreateLockConfig, CreateRedlockConfig } from './factory.js';
 
 export { SimpleLock, LeanSimpleLock, RedLock } from './locks/index.js';
-export type { Lock, LockHandle, SimpleLockConfig, RedLockConfig } from './locks/index.js';
+export type {
+  Lock,
+  LockHandle,
+  SimpleLockConfig,
+  RedLockConfig,
+  CircuitBreakerConfig,
+} from './locks/index.js';
 
 export {
   BaseAdapter,

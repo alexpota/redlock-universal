@@ -151,7 +151,7 @@ if (!locked) {
 
 ### Distributed Lock (Redlock Algorithm)
 
-For fault-tolerant locking across multiple Redis instances using the [Redlock algorithm](https://redis.io/docs/manual/patterns/distributed-locks/):
+For fault-tolerant locking across multiple Redis instances using the [Redlock algorithm](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/):
 
 ```typescript
 import { createRedlock, IoredisAdapter } from 'redlock-universal';
@@ -224,6 +224,7 @@ interface CreateLockConfig {
   retryDelay?: number;       // Default: 100ms
   performance?: 'standard' | 'lean' | 'enterprise';
   logger?: ILogger;          // Optional structured logging
+  circuitBreaker?: boolean | CircuitBreakerConfig; // Default: enabled
 }
 
 interface CreateRedlockConfig {
@@ -382,9 +383,39 @@ const lock = createLock({ adapter, key: 'resource', performance: 'standard' });
 // Lean - memory-optimized, minimal overhead (~3% faster)
 const lock = createLock({ adapter, key: 'resource', performance: 'lean' });
 
-// Enterprise - standard + circuit breakers + advanced observability
+// Enterprise - standard with advanced observability
 const lock = createLock({ adapter, key: 'resource', performance: 'enterprise' });
 ```
+
+</details>
+
+<details>
+<summary><strong>Advanced: Circuit Breaker</strong></summary>
+
+SimpleLock includes a built-in circuit breaker that fast-fails when Redis is persistently unavailable, avoiding long TCP timeouts on every `acquire()` call.
+
+**States:** Closed (normal) → Open (fast-fail) → Half-Open (single probe) → Closed
+
+```typescript
+// Enabled by default — customize thresholds:
+const lock = createLock({
+  adapter, key: 'resource',
+  circuitBreaker: {
+    failureThreshold: 5,       // Consecutive failures to trip (default: 5)
+    resetTimeout: 60000,       // Ms before probing recovery (default: 60000)
+    healthCheckInterval: 30000 // Ms between health checks (default: 30000)
+  }
+});
+
+// Disable entirely:
+const lock = createLock({ adapter, key: 'resource', circuitBreaker: false });
+
+// Check breaker state:
+const health = lock.getHealth();
+// { healthy, lastCheck, connected, circuitBreaker: { state, failures, openedAt } }
+```
+
+The circuit breaker is available in `standard` and `enterprise` performance modes. The `lean` mode omits it for minimal memory overhead.
 
 </details>
 

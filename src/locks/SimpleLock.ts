@@ -38,6 +38,7 @@ export class SimpleLock implements Lock {
   private _circuitBreakerTimeout: number = DEFAULTS.CIRCUIT_BREAKER_TIMEOUT;
   private _circuitBreakerOpenedAt: number = 0;
   private _circuitBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
+  private readonly _circuitBreakerEnabled: boolean;
 
   private readonly _metadataTemplate: {
     strategy: 'simple';
@@ -59,6 +60,37 @@ export class SimpleLock implements Lock {
     this.onAcquire = (config as any).onAcquire;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.onRelease = (config as any).onRelease;
+
+    // Parse circuit breaker config
+    const cbConfig = config.circuitBreaker;
+    if (cbConfig === false) {
+      this._circuitBreakerEnabled = false;
+    } else {
+      this._circuitBreakerEnabled = true;
+      if (typeof cbConfig === 'object' && cbConfig !== null) {
+        if (cbConfig.failureThreshold !== undefined) {
+          if (cbConfig.failureThreshold <= 0 || !Number.isInteger(cbConfig.failureThreshold)) {
+            throw new Error('Circuit breaker failureThreshold must be a positive integer');
+          }
+          this._circuitBreakerThreshold = cbConfig.failureThreshold;
+        }
+        if (cbConfig.resetTimeout !== undefined) {
+          if (cbConfig.resetTimeout <= 0 || !Number.isInteger(cbConfig.resetTimeout)) {
+            throw new Error('Circuit breaker resetTimeout must be a positive integer');
+          }
+          this._circuitBreakerTimeout = cbConfig.resetTimeout;
+        }
+        if (cbConfig.healthCheckInterval !== undefined) {
+          if (
+            cbConfig.healthCheckInterval <= 0 ||
+            !Number.isInteger(cbConfig.healthCheckInterval)
+          ) {
+            throw new Error('Circuit breaker healthCheckInterval must be a positive integer');
+          }
+          this._healthCheckInterval = cbConfig.healthCheckInterval;
+        }
+      }
+    }
 
     this._metadataTemplate = Object.freeze({
       strategy: 'simple' as const,
@@ -111,7 +143,18 @@ export class SimpleLock implements Lock {
     } else {
       this._circuitBreakerFailures++;
 
-      if (
+      if (this._circuitBreakerState === 'half-open') {
+        // Probe failed — re-open the circuit
+        this._circuitBreakerState = 'open';
+        this._circuitBreakerOpenedAt = now;
+        if (this.logger) {
+          this.logger.error('Circuit breaker re-opened - probe failed', undefined, {
+            key: this.key,
+            correlationId: this.correlationId,
+            circuitBreakerState: this._circuitBreakerState,
+          });
+        }
+      } else if (
         this._circuitBreakerState === 'closed' &&
         this._circuitBreakerFailures >= this._circuitBreakerThreshold
       ) {
@@ -125,20 +168,6 @@ export class SimpleLock implements Lock {
             circuitBreakerState: this._circuitBreakerState,
           });
         }
-      }
-    }
-
-    if (
-      this._circuitBreakerState === 'open' &&
-      now - this._circuitBreakerOpenedAt > this._circuitBreakerTimeout
-    ) {
-      this._circuitBreakerState = 'half-open';
-      if (this.logger) {
-        this.logger.info('Circuit breaker half-open - testing Redis', {
-          key: this.key,
-          correlationId: this.correlationId,
-          circuitBreakerState: this._circuitBreakerState,
-        });
       }
     }
   }
@@ -184,15 +213,39 @@ export class SimpleLock implements Lock {
    * Attempt to acquire the lock
    */
   async acquire(): Promise<LockHandle> {
-    if (this._circuitBreakerState === 'open') {
-      throw new LockAcquisitionError(
-        this.key,
-        0,
-        new Error('Circuit breaker is open - Redis is failing')
-      );
+    if (this._circuitBreakerEnabled) {
+      if (this._circuitBreakerState === 'open') {
+        const now = Date.now();
+        if (now - this._circuitBreakerOpenedAt > this._circuitBreakerTimeout) {
+          this._circuitBreakerState = 'half-open';
+          if (this.logger) {
+            this.logger.info('Circuit breaker half-open - testing Redis', {
+              key: this.key,
+              correlationId: this.correlationId,
+              circuitBreakerState: this._circuitBreakerState,
+            });
+          }
+          // Fall through — this acquire call serves as the probe
+        } else {
+          throw new LockAcquisitionError(
+            this.key,
+            0,
+            new Error('Circuit breaker is open - Redis is failing')
+          );
+        }
+      } else if (this._circuitBreakerState === 'half-open') {
+        // Another acquire() is already probing — fast-fail to avoid flooding
+        throw new LockAcquisitionError(
+          this.key,
+          0,
+          new Error('Circuit breaker is half-open - probe in progress')
+        );
+      }
     }
 
-    await this.checkConnectionHealth();
+    if (this._circuitBreakerEnabled) {
+      await this.checkConnectionHealth();
+    }
 
     const startTime = Date.now();
     let lastError: Error | null = null;
@@ -202,7 +255,9 @@ export class SimpleLock implements Lock {
       try {
         const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
 
-        this.updateCircuitBreaker(true);
+        if (this._circuitBreakerEnabled) {
+          this.updateCircuitBreaker(true);
+        }
 
         if (result === REDIS_OK_RESPONSE) {
           const acquisitionTime = Date.now() - startTime;
@@ -232,7 +287,9 @@ export class SimpleLock implements Lock {
       } catch (error) {
         lastError = error as Error;
 
-        this.updateCircuitBreaker(false);
+        if (this._circuitBreakerEnabled) {
+          this.updateCircuitBreaker(false);
+        }
 
         if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {
           if (this.logger) {
