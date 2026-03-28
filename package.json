@@ -122,12 +122,9 @@
     "tmp": "^0.2.4",
     "glob": "^10.5.0",
     "lodash": "^4.17.23",
-    "undici": "^6.24.1",
-    "flatted": ">=3.4.0",
     "minimatch": ">=9.0.7",
-    "markdown-it": ">=14.1.1",
-    "npm": "^11.11.0",
-    "rollup": ">=4.59.0",
+    "handlebars": ">=4.7.9",
+    "picomatch": ">=2.3.2",
     "@commitlint/config-validator": {
       "ajv": "^8.18.0"
     }
