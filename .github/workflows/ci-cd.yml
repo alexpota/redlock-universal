@@ -47,6 +47,11 @@ jobs:
       fail-fast: false
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@v6
 
@@ -87,7 +92,7 @@ jobs:
       if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
       with:
         fail_ci_if_error: false
@@ -112,6 +117,11 @@ jobs:
         logger: [winston, pino, bunyan]
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@v6
 
@@ -146,6 +156,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@v6
       with:
@@ -182,6 +197,11 @@ jobs:
     if: github.event_name == 'release'
     
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@v2
+      with:
+        egress-policy: audit
+
     - name: Checkout code
       uses: actions/checkout@v6
 
