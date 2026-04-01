@@ -87,7 +87,7 @@ jobs:
       if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
       with:
         fail_ci_if_error: false
