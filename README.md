@@ -8,6 +8,7 @@
 [![Test Coverage](https://img.shields.io/badge/coverage-86%25-green.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/alexpota)
 
 The only distributed lock library supporting **all three** Redis clients:
 
