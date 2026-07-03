@@ -80,11 +80,7 @@ export interface AdapterHealth {
 export interface LockEvent {
   /** Event type */
   readonly type:
-    | 'acquisition_started'
-    | 'acquisition_success'
-    | 'acquisition_failed'
-    | 'released'
-    | 'extended';
+    'acquisition_started' | 'acquisition_success' | 'acquisition_failed' | 'released' | 'extended';
 
   /** Lock key */
   readonly key: string;
