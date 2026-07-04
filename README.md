@@ -14,7 +14,7 @@ The only distributed lock library supporting **all three** Redis clients:
 
 **node-redis** &bull; **ioredis** &bull; **Valkey GLIDE**
 
-> <img src="https://nestjs.com/img/logo-small.svg" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
+> <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
 
 ## Quick Start
 
