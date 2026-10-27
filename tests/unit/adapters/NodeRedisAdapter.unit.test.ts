@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeRedisAdapter } from '../../../src/adapters/NodeRedisAdapter.js';
+import {
+  DELETE_IF_MATCH_SCRIPT,
+  EXTEND_IF_MATCH_SCRIPT,
+} from '../../../src/adapters/BaseAdapter.js';
 import { TEST_STRINGS } from '../../shared/constants.js';
+import { NO_SCRIPT_ERRORS, scriptSha } from '../../shared/scripts.js';
 
 describe('NodeRedisAdapter Unit Tests', () => {
   let mockClient: any;
@@ -15,6 +20,8 @@ describe('NodeRedisAdapter Unit Tests', () => {
       eval: vi.fn(),
       scriptLoad: vi.fn(),
       evalSha: vi.fn(),
+      EVAL: vi.fn(),
+      sendCommand: vi.fn(),
       ping: vi.fn(),
       disconnect: vi.fn(),
       isReady: true,
@@ -101,7 +108,6 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('delIfMatch', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
-      mockClient.scriptLoad.mockResolvedValue('mock-sha');
       mockClient.evalSha.mockResolvedValue(1);
 
       const result = await adapter.delIfMatch(
@@ -109,8 +115,8 @@ describe('NodeRedisAdapter Unit Tests', () => {
         TEST_STRINGS.TEST_VALUE
       );
 
-      expect(mockClient.scriptLoad).toHaveBeenCalled();
-      expect(mockClient.evalSha).toHaveBeenCalledWith('mock-sha', {
+      expect(mockClient.scriptLoad).not.toHaveBeenCalled();
+      expect(mockClient.evalSha).toHaveBeenCalledWith(scriptSha(DELETE_IF_MATCH_SCRIPT), {
         keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
         arguments: [TEST_STRINGS.TEST_VALUE],
       });
@@ -118,7 +124,6 @@ describe('NodeRedisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.scriptLoad.mockResolvedValue('mock-sha');
       mockClient.evalSha.mockResolvedValue(0);
 
       const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
@@ -129,7 +134,6 @@ describe('NodeRedisAdapter Unit Tests', () => {
 
   describe('extendIfMatch', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
-      mockClient.scriptLoad.mockResolvedValue('mock-sha');
       mockClient.evalSha.mockResolvedValue(1);
 
       const result = await adapter.extendIfMatch(
@@ -138,8 +142,8 @@ describe('NodeRedisAdapter Unit Tests', () => {
         10000
       );
 
-      expect(mockClient.scriptLoad).toHaveBeenCalled();
-      expect(mockClient.evalSha).toHaveBeenCalledWith('mock-sha', {
+      expect(mockClient.scriptLoad).not.toHaveBeenCalled();
+      expect(mockClient.evalSha).toHaveBeenCalledWith(scriptSha(EXTEND_IF_MATCH_SCRIPT), {
         keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
         arguments: [TEST_STRINGS.TEST_VALUE, '10000'],
       });
@@ -147,7 +151,6 @@ describe('NodeRedisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.scriptLoad.mockResolvedValue('mock-sha');
       mockClient.evalSha.mockResolvedValue(0);
 
       const result = await adapter.extendIfMatch(
@@ -163,6 +166,78 @@ describe('NodeRedisAdapter Unit Tests', () => {
       await expect(adapter.extendIfMatch('key', 'value', -1)).rejects.toThrow(
         'TTL must be a positive integer'
       );
+    });
+  });
+
+  describe('script cache', () => {
+    const scriptOptions = {
+      keys: [TEST_STRINGS.ADAPTER_TEST_KEY],
+      arguments: [TEST_STRINGS.TEST_VALUE],
+    };
+
+    it('should send the script with EVAL() when the server does not have it', async () => {
+      mockClient.evalSha.mockRejectedValue(new Error(NO_SCRIPT_ERRORS.REPLY));
+      mockClient.EVAL.mockResolvedValue(1);
+
+      const result = await adapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(mockClient.EVAL).toHaveBeenCalledWith(DELETE_IF_MATCH_SCRIPT, scriptOptions);
+      expect(mockClient.sendCommand).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should use the typed script commands on a cluster that routes them by key', async () => {
+      const cluster = { ...mockClient, masters: [] };
+      cluster.evalSha.mockResolvedValue(1);
+
+      const result = await new NodeRedisAdapter(cluster).delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(cluster.evalSha).toHaveBeenCalledWith(
+        scriptSha(DELETE_IF_MATCH_SCRIPT),
+        scriptOptions
+      );
+      expect(cluster.sendCommand).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should route both script commands by the first key on a node-redis 4 cluster', async () => {
+      // node-redis 4 cluster clients expose RedisCluster.extractFirstKey
+      class LegacyCluster {
+        static extractFirstKey = vi.fn();
+      }
+      const cluster = Object.assign(new LegacyCluster(), mockClient, { masters: [] });
+      cluster.sendCommand
+        .mockRejectedValueOnce(new Error(NO_SCRIPT_ERRORS.REPLY)) // EVALSHA
+        .mockResolvedValueOnce(1); // EVAL
+      const clusterAdapter = new NodeRedisAdapter(cluster);
+
+      const result = await clusterAdapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(cluster.sendCommand).toHaveBeenNthCalledWith(1, TEST_STRINGS.ADAPTER_TEST_KEY, false, [
+        'EVALSHA',
+        scriptSha(DELETE_IF_MATCH_SCRIPT),
+        '1',
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+      ]);
+      expect(cluster.sendCommand).toHaveBeenNthCalledWith(2, TEST_STRINGS.ADAPTER_TEST_KEY, false, [
+        'EVAL',
+        DELETE_IF_MATCH_SCRIPT,
+        '1',
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE,
+      ]);
+      expect(cluster.evalSha).not.toHaveBeenCalled();
+      expect(result).toBe(true);
     });
   });
 

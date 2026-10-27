@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NodeRedisAdapter, IoredisAdapter } from '../../../src/index.js';
+import { ATOMIC_EXTEND_SCRIPT } from '../../../src/adapters/BaseAdapter.js';
 import { TEST_CONFIG, TIMING_CONFIG } from '../../shared/constants.js';
+import { scriptSha } from '../../shared/scripts.js';
 const TEST_VALUES = {
   KEY: 'test-key',
   VALUE: 'test-value',
@@ -55,7 +57,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle successful atomic extension', async () => {
-      mockClient.scriptLoad.mockResolvedValueOnce('sha1234');
       mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.SUCCESS,
         ATOMIC_EXTENSION_CONFIG.SUCCESSFUL_REMAINING,
@@ -74,10 +75,8 @@ describe('Atomic Extension Tests', () => {
         message: `Extension successful (${ATOMIC_EXTENSION_CONFIG.SUCCESSFUL_REMAINING}ms remaining before extension)`,
       });
 
-      expect(mockClient.scriptLoad).toHaveBeenCalledWith(
-        expect.stringContaining('redis.call("PTTL"')
-      );
-      expect(mockClient.evalSha).toHaveBeenCalledWith('sha1234', {
+      expect(mockClient.scriptLoad).not.toHaveBeenCalled();
+      expect(mockClient.evalSha).toHaveBeenCalledWith(scriptSha(ATOMIC_EXTEND_SCRIPT), {
         keys: [TEST_VALUES.KEY],
         arguments: [
           TEST_VALUES.VALUE,
@@ -88,7 +87,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle race condition (too late to extend)', async () => {
-      mockClient.scriptLoad.mockResolvedValueOnce('sha1234');
       mockClient.evalSha.mockResolvedValueOnce([RESULT_CODES.TOO_LATE, TIMING_CONFIG.DELAY_TINY]);
 
       const result = await adapter.atomicExtend(
@@ -106,7 +104,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle lock value mismatch', async () => {
-      mockClient.scriptLoad.mockResolvedValueOnce('sha1234');
       mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.VALUE_MISMATCH,
         ATOMIC_EXTENSION_CONFIG.STOLEN_LOCK_TTL,
@@ -127,7 +124,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle key not exists', async () => {
-      mockClient.scriptLoad.mockResolvedValueOnce('sha1234');
       mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.VALUE_MISMATCH,
         RESULT_CODES.KEY_NOT_EXISTS,
@@ -186,7 +182,7 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle Redis errors', async () => {
-      mockClient.scriptLoad.mockRejectedValueOnce(new Error('Redis connection failed'));
+      mockClient.evalSha.mockRejectedValueOnce(new Error('Redis connection failed'));
 
       await expect(
         adapter.atomicExtend(
@@ -195,7 +191,7 @@ describe('Atomic Extension Tests', () => {
           TEST_CONFIG.TTL_BUFFER,
           ATOMIC_EXTENSION_CONFIG.STANDARD_TTL
         )
-      ).rejects.toThrow('Failed to load script ATOMIC_EXTEND');
+      ).rejects.toThrow('Script execution failed');
     });
   });
 
@@ -209,7 +205,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle successful atomic extension', async () => {
-      mockClient.script.mockResolvedValueOnce('sha5678');
       mockClient.evalsha.mockResolvedValueOnce([
         RESULT_CODES.SUCCESS,
         ATOMIC_EXTENSION_CONFIG.IOREDIS_REMAINING,
@@ -228,12 +223,9 @@ describe('Atomic Extension Tests', () => {
         message: `Extension successful (${ATOMIC_EXTENSION_CONFIG.IOREDIS_REMAINING}ms remaining before extension)`,
       });
 
-      expect(mockClient.script).toHaveBeenCalledWith(
-        'LOAD',
-        expect.stringContaining('redis.call("PTTL"')
-      );
+      expect(mockClient.script).not.toHaveBeenCalled();
       expect(mockClient.evalsha).toHaveBeenCalledWith(
-        'sha5678',
+        scriptSha(ATOMIC_EXTEND_SCRIPT),
         1,
         TEST_VALUES.KEY,
         TEST_VALUES.VALUE,
@@ -243,7 +235,6 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle race condition scenarios', async () => {
-      mockClient.script.mockResolvedValueOnce('sha5678');
       mockClient.evalsha.mockResolvedValueOnce([
         RESULT_CODES.TOO_LATE,
         TEST_CONFIG.FAST_RETRY_DELAY,
@@ -287,7 +278,6 @@ describe('Atomic Extension Tests', () => {
       const mockClient = createMockNodeRedisClient();
       const adapter = new NodeRedisAdapter(mockClient as any);
 
-      mockClient.scriptLoad.mockResolvedValue('sha1234');
       mockClient.evalSha.mockResolvedValue([
         RESULT_CODES.SUCCESS,
         ATOMIC_EXTENSION_CONFIG.SUCCESSFUL_REMAINING,
@@ -322,7 +312,7 @@ describe('Atomic Extension Tests', () => {
       const avgTime = (end - start) / ATOMIC_EXTENSION_CONFIG.PERFORMANCE_ITERATIONS;
       expect(avgTime).toBeLessThan(TIMING_CONFIG.UNIT_QUICK_DELAY);
 
-      expect(mockClient.scriptLoad).toHaveBeenCalledTimes(1);
+      expect(mockClient.scriptLoad).not.toHaveBeenCalled();
       expect(mockClient.evalSha).toHaveBeenCalledTimes(
         ATOMIC_EXTENSION_CONFIG.PERFORMANCE_ITERATIONS
       );

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IoredisAdapter } from '../../../src/adapters/IoredisAdapter.js';
+import {
+  DELETE_IF_MATCH_SCRIPT,
+  EXTEND_IF_MATCH_SCRIPT,
+} from '../../../src/adapters/BaseAdapter.js';
 import { TEST_STRINGS } from '../../shared/constants.js';
+import { NO_SCRIPT_ERRORS, scriptSha } from '../../shared/scripts.js';
 
 describe('IoredisAdapter Unit Tests', () => {
   let mockClient: any;
@@ -15,6 +20,7 @@ describe('IoredisAdapter Unit Tests', () => {
       eval: vi.fn(),
       script: vi.fn(),
       evalsha: vi.fn(),
+      call: vi.fn(),
       ping: vi.fn(),
       disconnect: vi.fn(),
       status: 'ready',
@@ -100,7 +106,6 @@ describe('IoredisAdapter Unit Tests', () => {
 
   describe('delIfMatch', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
-      mockClient.script.mockResolvedValue('mock-sha');
       mockClient.evalsha.mockResolvedValue(1);
 
       const result = await adapter.delIfMatch(
@@ -108,9 +113,9 @@ describe('IoredisAdapter Unit Tests', () => {
         TEST_STRINGS.TEST_VALUE
       );
 
-      expect(mockClient.script).toHaveBeenCalledWith('LOAD', expect.any(String));
+      expect(mockClient.script).not.toHaveBeenCalled();
       expect(mockClient.evalsha).toHaveBeenCalledWith(
-        'mock-sha',
+        scriptSha(DELETE_IF_MATCH_SCRIPT),
         1,
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE
@@ -119,7 +124,6 @@ describe('IoredisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.script.mockResolvedValue('mock-sha');
       mockClient.evalsha.mockResolvedValue(0);
 
       const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
@@ -130,7 +134,6 @@ describe('IoredisAdapter Unit Tests', () => {
 
   describe('extendIfMatch', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
-      mockClient.script.mockResolvedValue('mock-sha');
       mockClient.evalsha.mockResolvedValue(1);
 
       const result = await adapter.extendIfMatch(
@@ -139,9 +142,9 @@ describe('IoredisAdapter Unit Tests', () => {
         10000
       );
 
-      expect(mockClient.script).toHaveBeenCalledWith('LOAD', expect.any(String));
+      expect(mockClient.script).not.toHaveBeenCalled();
       expect(mockClient.evalsha).toHaveBeenCalledWith(
-        'mock-sha',
+        scriptSha(EXTEND_IF_MATCH_SCRIPT),
         1,
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE,
@@ -151,7 +154,6 @@ describe('IoredisAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.script.mockResolvedValue('mock-sha');
       mockClient.evalsha.mockResolvedValue(0);
 
       const result = await adapter.extendIfMatch(
@@ -167,6 +169,27 @@ describe('IoredisAdapter Unit Tests', () => {
       await expect(adapter.extendIfMatch('key', 'value', -1)).rejects.toThrow(
         'TTL must be a positive integer'
       );
+    });
+  });
+
+  describe('script cache', () => {
+    it('should send the script through call() when the server does not have it', async () => {
+      mockClient.evalsha.mockRejectedValue(new Error(NO_SCRIPT_ERRORS.REPLY));
+      mockClient.call.mockResolvedValue(1);
+
+      const result = await adapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(mockClient.call).toHaveBeenCalledWith(
+        'eval',
+        DELETE_IF_MATCH_SCRIPT,
+        1,
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+      expect(result).toBe(true);
     });
   });
 

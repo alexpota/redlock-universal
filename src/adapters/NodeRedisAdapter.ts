@@ -14,11 +14,7 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-
-// Redis error constants
-const REDIS_ERROR_NOSCRIPT = 'NOSCRIPT';
-
-const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
+import { executeScript } from './script-execution.js';
 
 /**
  * Flexible type for node-redis clients.
@@ -39,10 +35,18 @@ type FlexibleRedisClient = any;
  */
 export class NodeRedisAdapter extends BaseAdapter {
   private readonly client: FlexibleRedisClient;
+  /**
+   * node-redis 4 cluster clients (the only ones with a static `extractFirstKey`) pass the
+   * script to `extractFirstKey` where it expects the options, so evalSha()/EVAL() reach a
+   * random node. node-redis 4 has no client key prefix, so raw commands are safe there.
+   */
+  private readonly routesScriptsByHand: boolean;
 
   constructor(client: FlexibleRedisClient, options: RedisAdapterOptions = {}) {
     super(options);
     this.client = client;
+    this.routesScriptsByHand =
+      'masters' in client && typeof client.constructor?.extractFirstKey === 'function';
   }
 
   /**
@@ -53,53 +57,35 @@ export class NodeRedisAdapter extends BaseAdapter {
   }
 
   /**
-   * Execute a Lua script with automatic loading, caching, and NOSCRIPT retry handling
+   * Execute a Lua script by SHA, sending the script itself when the node does not have it
    * @private
    */
   private async _executeScript<T>(
     scriptCacheKey: string,
     scriptBody: string,
     keys: string[],
-    args: (string | number)[],
-    retryAttempt = 0
+    args: (string | number)[]
   ): Promise<T> {
-    let scriptSHA = this.scriptSHAs.get(scriptCacheKey);
+    const stringArgs = args.map(a => a.toString());
 
-    if (!scriptSHA) {
-      try {
-        scriptSHA = await this.withTimeout(this.client.scriptLoad(scriptBody) as Promise<string>);
-        this.scriptSHAs.set(scriptCacheKey, scriptSHA);
-      } catch (error) {
-        throw new Error(`Failed to load script ${scriptCacheKey}`, { cause: error });
-      }
+    if (this.routesScriptsByHand) {
+      const scriptArgs = [keys.length.toString(), ...keys, ...stringArgs];
+      const send = (command: string[]): Promise<T> =>
+        this.client.sendCommand(keys[0], false, command) as Promise<T>;
+
+      return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+        evalSha: sha => this.withTimeout(send(['EVALSHA', sha, ...scriptArgs])),
+        evalScript: () => this.withTimeout(send(['EVAL', scriptBody, ...scriptArgs])),
+      });
     }
 
-    try {
-      const result = await this.withTimeout(
-        this.client.evalSha(scriptSHA, {
-          keys,
-          arguments: args.map(a => a.toString()),
-        })
-      );
-      return result as T;
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-
-      if (errorMessage.includes(REDIS_ERROR_NOSCRIPT)) {
-        this.scriptSHAs.delete(scriptCacheKey);
-
-        if (retryAttempt < MAX_SCRIPT_RETRY_ATTEMPTS) {
-          return this._executeScript(scriptCacheKey, scriptBody, keys, args, retryAttempt + 1);
-        }
-
-        throw new Error(
-          `Script execution failed after ${MAX_SCRIPT_RETRY_ATTEMPTS} NOSCRIPT retries`,
-          { cause: error }
-        );
-      }
-
-      throw new Error('Script execution failed', { cause: error });
-    }
+    // Typed commands keep the client's own key handling: key prefix (node-redis 6.1+)
+    // and cluster routing
+    const scriptOptions = { keys, arguments: stringArgs };
+    return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+      evalSha: sha => this.withTimeout(this.client.evalSha(sha, scriptOptions) as Promise<T>),
+      evalScript: () => this.withTimeout(this.client.EVAL(scriptBody, scriptOptions) as Promise<T>),
+    });
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {

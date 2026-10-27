@@ -14,11 +14,7 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-
-// Redis error constants
-const REDIS_ERROR_NOSCRIPT = 'NOSCRIPT';
-
-const MAX_SCRIPT_RETRY_ATTEMPTS = 1;
+import { executeScript } from './script-execution.js';
 
 // GLIDE-specific option constants
 const GLIDE_CONDITIONAL_SET_NX = 'onlyIfDoesNotExist' as const;
@@ -85,58 +81,22 @@ export class GlideAdapter extends BaseAdapter {
   }
 
   /**
-   * Execute a Lua script with automatic loading, caching, and NOSCRIPT retry handling
+   * Execute a Lua script by SHA, sending the script itself when the node does not have it
    * @private
    */
   private async _executeScript<T>(
     scriptCacheKey: string,
     scriptBody: string,
     keys: string[],
-    args: (string | number)[],
-    retryAttempt = 0
+    args: (string | number)[]
   ): Promise<T> {
-    let scriptSHA = this.scriptSHAs.get(scriptCacheKey);
+    const scriptArgs = [keys.length.toString(), ...keys, ...args.map(a => a.toString())];
 
-    if (!scriptSHA) {
-      try {
-        scriptSHA = (await this.withTimeout(
-          this.client.customCommand(['SCRIPT', 'LOAD', scriptBody])
-        )) as string;
-        this.scriptSHAs.set(scriptCacheKey, scriptSHA);
-      } catch (error) {
-        throw new Error(`Failed to load script ${scriptCacheKey}`, { cause: error });
-      }
-    }
-
-    try {
-      const result = await this.withTimeout(
-        this.client.customCommand([
-          'EVALSHA',
-          scriptSHA,
-          keys.length.toString(),
-          ...keys,
-          ...args.map(a => a.toString()),
-        ])
-      );
-      return result as T;
-    } catch (error) {
-      const errorMessage = (error as Error).message;
-
-      if (errorMessage.includes(REDIS_ERROR_NOSCRIPT)) {
-        this.scriptSHAs.delete(scriptCacheKey);
-
-        if (retryAttempt < MAX_SCRIPT_RETRY_ATTEMPTS) {
-          return this._executeScript(scriptCacheKey, scriptBody, keys, args, retryAttempt + 1);
-        }
-
-        throw new Error(
-          `Script execution failed after ${MAX_SCRIPT_RETRY_ATTEMPTS} NOSCRIPT retries`,
-          { cause: error }
-        );
-      }
-
-      throw new Error('Script execution failed', { cause: error });
-    }
+    return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+      evalSha: sha => this.withTimeout(this.client.customCommand(['EVALSHA', sha, ...scriptArgs])),
+      evalScript: () =>
+        this.withTimeout(this.client.customCommand(['EVAL', scriptBody, ...scriptArgs])),
+    });
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {
