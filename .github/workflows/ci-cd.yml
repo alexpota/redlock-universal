@@ -151,10 +151,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: npm-publish
     permissions:
-      contents: write       # Required for semantic-release to push tags and create releases
-      issues: write         # Required for semantic-release to comment on and open issues
-      pull-requests: write  # Required for semantic-release to comment on released pull requests
-      id-token: write       # Required for npm trusted publishing (OIDC) and provenance
+      contents: write  # Required for semantic-release to push tags and create releases
+      id-token: write  # Required for npm trusted publishing (OIDC) and provenance
 
     steps:
     - name: Harden Runner
