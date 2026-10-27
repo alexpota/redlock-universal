@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Production-ready distributed locks for Redis and Valkey with support for node-redis, ioredis, and Valkey GLIDE",
   "keywords": [
     "redis",
@@ -39,16 +39,23 @@
     "url": "https://github.com/alexpota/redlock-universal/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/index.d.cts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "README.md",
