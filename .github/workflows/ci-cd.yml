@@ -184,13 +184,7 @@ jobs:
     - name: Build
       run: npm run build
 
-    - name: Configure NPM Authentication
-      run: |
-        echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-        echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
-
     - name: Release
       run: npx --no-install semantic-release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        NPM_CONFIG_PROVENANCE: true
