@@ -44,7 +44,7 @@ export default defineConfig({
   },
 
   // TypeScript
-  esbuild: {
+  oxc: {
     target: 'es2022',
   },
 });
