@@ -91,10 +91,15 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
   let extensionTimer: ReturnType<typeof setTimeout> | null = null;
   let extending: Promise<ExtensionResult> | undefined;
   let isAborted = false;
+  let isFinished = false;
   let abortError: Error | undefined;
-  let lastExtensionTime = Math.max(...handles.map(h => h.acquiredAt));
+  // The earliest acquisition expires first
+  let lastExtensionTime = Math.min(...handles.map(h => h.acquiredAt));
 
   const threshold = Math.floor(ttl * extensionThresholdRatio);
+  // Extensions due within this window run at once; capping it at the threshold keeps
+  // short TTLs from extending back to back
+  const immediateWindow = Math.min(minExtensionInterval, threshold);
 
   const abortController = new AbortController();
 
@@ -106,6 +111,8 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
   });
 
   const scheduleExtension = (): void => {
+    if (isFinished) return;
+
     if (extensionTimer) {
       clearTimeout(extensionTimer);
     }
@@ -114,17 +121,17 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
     const timeUntilExpiry = lastExtensionTime + ttl - now;
     const timeUntilExtension = timeUntilExpiry - threshold;
 
-    const safeExtensionTime = Math.max(timeUntilExtension, minExtensionInterval);
-
-    if (safeExtensionTime <= minExtensionInterval) {
+    if (timeUntilExtension <= immediateWindow) {
       void attemptExtension();
     } else {
-      extensionTimer = setTimeout(attemptExtension, safeExtensionTime);
+      extensionTimer = setTimeout(attemptExtension, timeUntilExtension);
     }
   };
 
   const attemptExtension = async (): Promise<void> => {
     if (isAborted) return;
+
+    const attemptStartedAt = Date.now();
 
     const extensionPromises = locks.map(async (lock, index): Promise<IndividualExtensionResult> => {
       try {
@@ -182,7 +189,8 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
       let failedLocks: string[] | undefined;
 
       if (allSuccess) {
-        lastExtensionTime = Date.now();
+        // The new TTL started when the extension was sent, not when the slowest node replied
+        lastExtensionTime = attemptStartedAt;
 
         const atomicResults = results
           .map(r => r.atomicResult)
@@ -231,6 +239,9 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
 
     return await routine(enhancedSignal);
   } finally {
+    // Stops an in-flight extension from scheduling another one
+    isFinished = true;
+
     if (extensionTimer) {
       clearTimeout(extensionTimer);
       extensionTimer = null;
