@@ -19,6 +19,17 @@ stop() {
   docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true
 }
 
+# Whether every node reports the cluster as up, with all slots covered and all nodes known.
+# Right after --cluster create one node can be up while another still answers CLUSTERDOWN.
+ready() {
+  local server=$1 port info
+  for port in "${PORTS[@]}"; do
+    info=$(docker exec "$CONTAINER" "${server}-cli" -p "$port" cluster info 2>/dev/null) || return 1
+    [[ $info == *cluster_state:ok* && $info == *cluster_slots_ok:16384* &&
+      $info == *"cluster_known_nodes:${#PORTS[@]}"* ]] || return 1
+  done
+}
+
 start() {
   local server=$1 image
   case "$server" in
@@ -52,8 +63,7 @@ start() {
     exec tail -f /tmp/${PORTS[0]}.log" >/dev/null
 
   for _ in $(seq 1 60); do
-    if docker exec "$CONTAINER" "${server}-cli" -p "${PORTS[0]}" cluster info 2>/dev/null |
-      grep -q 'cluster_state:ok'; then
+    if ready "$server"; then
       echo "REDIS_CLUSTER_NODES=$(IFS=,; echo "${nodes[*]}")"
       return 0
     fi
