@@ -71,6 +71,10 @@ jobs:
     - name: Build
       run: npm run build
 
+    - name: Check package exports
+      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
+      run: npm run lint:package
+
     - name: Test - Unit
       run: npm run test
 
