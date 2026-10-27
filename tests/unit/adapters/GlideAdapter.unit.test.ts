@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GlideAdapter } from '../../../src/adapters/GlideAdapter.js';
+import {
+  DELETE_IF_MATCH_SCRIPT,
+  EXTEND_IF_MATCH_SCRIPT,
+} from '../../../src/adapters/BaseAdapter.js';
 import { TEST_STRINGS } from '../../shared/constants.js';
+import { NO_SCRIPT_ERRORS, scriptSha } from '../../shared/scripts.js';
 
 describe('GlideAdapter Unit Tests', () => {
   let mockClient: any;
@@ -118,20 +123,17 @@ describe('GlideAdapter Unit Tests', () => {
 
   describe('delIfMatch', () => {
     it('should execute Lua script for atomic delete-if-match', async () => {
-      // First call loads script, second executes it
-      mockClient.customCommand
-        .mockResolvedValueOnce('mock-sha') // SCRIPT LOAD
-        .mockResolvedValueOnce(1); // EVALSHA
+      mockClient.customCommand.mockResolvedValueOnce(1); // EVALSHA
 
       const result = await adapter.delIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE
       );
 
-      expect(mockClient.customCommand).toHaveBeenCalledWith(['SCRIPT', 'LOAD', expect.any(String)]);
+      expect(mockClient.customCommand).toHaveBeenCalledTimes(1);
       expect(mockClient.customCommand).toHaveBeenCalledWith([
         'EVALSHA',
-        'mock-sha',
+        scriptSha(DELETE_IF_MATCH_SCRIPT),
         '1',
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE,
@@ -140,7 +142,7 @@ describe('GlideAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.customCommand.mockResolvedValueOnce('mock-sha').mockResolvedValueOnce(0);
+      mockClient.customCommand.mockResolvedValueOnce(0);
 
       const result = await adapter.delIfMatch(TEST_STRINGS.ADAPTER_TEST_KEY, 'wrong-value');
 
@@ -150,7 +152,7 @@ describe('GlideAdapter Unit Tests', () => {
 
   describe('extendIfMatch', () => {
     it('should execute Lua script for atomic extend-if-match', async () => {
-      mockClient.customCommand.mockResolvedValueOnce('mock-sha').mockResolvedValueOnce(1);
+      mockClient.customCommand.mockResolvedValueOnce(1);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
@@ -158,10 +160,10 @@ describe('GlideAdapter Unit Tests', () => {
         10000
       );
 
-      expect(mockClient.customCommand).toHaveBeenCalledWith(['SCRIPT', 'LOAD', expect.any(String)]);
+      expect(mockClient.customCommand).toHaveBeenCalledTimes(1);
       expect(mockClient.customCommand).toHaveBeenCalledWith([
         'EVALSHA',
-        'mock-sha',
+        scriptSha(EXTEND_IF_MATCH_SCRIPT),
         '1',
         TEST_STRINGS.ADAPTER_TEST_KEY,
         TEST_STRINGS.TEST_VALUE,
@@ -171,7 +173,7 @@ describe('GlideAdapter Unit Tests', () => {
     });
 
     it('should return false when value does not match', async () => {
-      mockClient.customCommand.mockResolvedValueOnce('mock-sha').mockResolvedValueOnce(0);
+      mockClient.customCommand.mockResolvedValueOnce(0);
 
       const result = await adapter.extendIfMatch(
         TEST_STRINGS.ADAPTER_TEST_KEY,
@@ -186,6 +188,44 @@ describe('GlideAdapter Unit Tests', () => {
       await expect(adapter.extendIfMatch('key', 'value', -1)).rejects.toThrow(
         'TTL must be a positive integer'
       );
+    });
+  });
+
+  describe('script cache', () => {
+    const evalCommand = [
+      'EVAL',
+      DELETE_IF_MATCH_SCRIPT,
+      '1',
+      TEST_STRINGS.ADAPTER_TEST_KEY,
+      TEST_STRINGS.TEST_VALUE,
+    ];
+
+    it('should send the script after a NoScriptError reply', async () => {
+      mockClient.customCommand
+        .mockRejectedValueOnce(new Error(NO_SCRIPT_ERRORS.GLIDE)) // EVALSHA
+        .mockResolvedValueOnce(1); // EVAL
+
+      const result = await adapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(mockClient.customCommand).toHaveBeenLastCalledWith(evalCommand);
+      expect(result).toBe(true);
+    });
+
+    it('should send the script after an error named NoScriptError', async () => {
+      const noScript = new Error('No matching script.');
+      noScript.name = 'NoScriptError';
+      mockClient.customCommand.mockRejectedValueOnce(noScript).mockResolvedValueOnce(1);
+
+      const result = await adapter.delIfMatch(
+        TEST_STRINGS.ADAPTER_TEST_KEY,
+        TEST_STRINGS.TEST_VALUE
+      );
+
+      expect(mockClient.customCommand).toHaveBeenLastCalledWith(evalCommand);
+      expect(result).toBe(true);
     });
   });
 

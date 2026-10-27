@@ -1,0 +1,64 @@
+name: Cluster Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  cluster:
+    name: Cluster (${{ matrix.server }}, ${{ matrix.clients.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        server: [redis, valkey]
+        clients:
+          - name: dev dependencies
+            install: ''
+          - name: ioredis 6, redis 5
+            install: ioredis@6.0.0 redis@5.12.1
+          - name: redis 6, GLIDE 2.5
+            install: redis@6.3.0 @valkey/valkey-glide@2.5.3
+      fail-fast: false
+
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2
+      with:
+        egress-policy: audit
+
+    - name: Checkout code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      with:
+        node-version: '22.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install client versions
+      if: matrix.clients.install != ''
+      run: npm install --no-save $CLIENTS
+      env:
+        CLIENTS: ${{ matrix.clients.install }}
+
+    - name: Start cluster
+      run: scripts/test-cluster.sh up "$SERVER" >> "$GITHUB_ENV"
+      env:
+        SERVER: ${{ matrix.server }}
+
+    - name: Test - Cluster
+      run: npx vitest --run tests/integration/cluster
+
+    - name: Stop cluster
+      if: always()
+      run: scripts/test-cluster.sh down
