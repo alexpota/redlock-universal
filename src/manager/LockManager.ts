@@ -8,6 +8,9 @@ import { generateLockValue, generateLockId } from '../utils/crypto.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
+/** Node ids in handle metadata, same format as RedLock handles */
+const NODE_ID_PREFIX = 'node-';
+
 /**
  * Configuration for LockManager
  */
@@ -56,8 +59,11 @@ export class LockManager {
     activeLocks: 0,
     acquiredLocks: 0,
     failedLocks: 0,
-    acquisitionTimes: [] as number[],
-    holdTimes: [] as number[],
+    // Running totals keep averages exact without storing every sample
+    acquisitionTimeTotal: 0,
+    acquisitionCount: 0,
+    holdTimeTotal: 0,
+    holdCount: 0,
   };
 
   constructor(config: LockManagerConfig) {
@@ -176,8 +182,7 @@ export class LockManager {
 
       const handle = await lock.acquire();
 
-      const acquisitionTime = Date.now() - startTime;
-      this.stats.acquisitionTimes.push(acquisitionTime);
+      this.recordAcquisitionTime(Date.now() - startTime);
       this.stats.acquiredLocks++;
       this.stats.activeLocks++;
 
@@ -194,8 +199,7 @@ export class LockManager {
    * Release a tracked lock
    */
   async releaseLock(handle: LockHandle): Promise<boolean> {
-    const holdTime = Date.now() - handle.acquiredAt;
-    this.stats.holdTimes.push(holdTime);
+    this.recordHoldTime(Date.now() - handle.acquiredAt);
 
     this.activeLocks.delete(handle.id);
     this.stats.activeLocks--;
@@ -308,11 +312,12 @@ export class LockManager {
             metadata: {
               attempts: attempt + 1,
               acquisitionTime,
+              nodes: [`${NODE_ID_PREFIX}${nodeIndex}`],
               strategy: 'simple' as const,
             },
           }));
 
-          this.stats.acquisitionTimes.push(acquisitionTime);
+          this.recordAcquisitionTime(acquisitionTime);
           this.stats.acquiredLocks += handles.length;
           this.stats.activeLocks += handles.length;
 
@@ -400,6 +405,33 @@ export class LockManager {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  private recordAcquisitionTime(ms: number): void {
+    this.stats.acquisitionTimeTotal += ms;
+    this.stats.acquisitionCount++;
+  }
+
+  private recordHoldTime(ms: number): void {
+    this.stats.holdTimeTotal += ms;
+    this.stats.holdCount++;
+  }
+
+  /**
+   * Stop tracking a lock as active (no-op if it is not tracked)
+   */
+  private untrackLock(handle: LockHandle): void {
+    if (this.activeLocks.delete(handle.id)) {
+      this.stats.activeLocks--;
+    }
+  }
+
+  /**
+   * Node a batch handle was acquired on, as recorded by acquireBatch (node 0 if absent)
+   */
+  private batchNodeIndex(handle: LockHandle): number {
+    const nodeId = handle.metadata?.nodes?.[0] ?? `${NODE_ID_PREFIX}0`;
+    return Number(nodeId.slice(NODE_ID_PREFIX.length));
+  }
+
   /**
    * Release multiple locks
    *
@@ -408,14 +440,10 @@ export class LockManager {
    */
   async releaseBatch(handles: LockHandle[]): Promise<boolean[]> {
     const releasePromises = handles.map(async handle => {
-      const holdTime = Date.now() - handle.acquiredAt;
-      this.stats.holdTimes.push(holdTime);
+      this.recordHoldTime(Date.now() - handle.acquiredAt);
+      this.untrackLock(handle);
 
-      if (this.activeLocks.delete(handle.id)) {
-        this.stats.activeLocks--;
-      }
-
-      const lock = this.createSimpleLock(handle.key);
+      const lock = this.createSimpleLock(handle.key, { nodeIndex: this.batchNodeIndex(handle) });
       return lock.release(handle);
     });
 
@@ -448,14 +476,23 @@ export class LockManager {
   ): Promise<T> {
     const handles = await this.acquireBatch(keys, options);
     const ttl = options.ttl ?? this.config.defaultTTL;
-    const locks = handles.map(handle => this.createSimpleLock(handle.key));
+    const locks = handles.map(handle =>
+      this.createSimpleLock(handle.key, { nodeIndex: this.batchNodeIndex(handle) })
+    );
 
-    return executeWithAutoExtension({
-      locks,
-      handles,
-      ttl,
-      routine,
-    });
+    try {
+      return await executeWithAutoExtension({
+        locks,
+        handles,
+        ttl,
+        routine,
+      });
+    } finally {
+      // The locks are released by now, whether the routine returned or threw
+      for (const handle of handles) {
+        this.untrackLock(handle);
+      }
+    }
   }
 
   /**
@@ -463,15 +500,12 @@ export class LockManager {
    */
   getStats(): LockStats {
     const avgAcquisitionTime =
-      this.stats.acquisitionTimes.length > 0
-        ? this.stats.acquisitionTimes.reduce((a, b) => a + b, 0) /
-          this.stats.acquisitionTimes.length
+      this.stats.acquisitionCount > 0
+        ? this.stats.acquisitionTimeTotal / this.stats.acquisitionCount
         : 0;
 
     const avgHoldTime =
-      this.stats.holdTimes.length > 0
-        ? this.stats.holdTimes.reduce((a, b) => a + b, 0) / this.stats.holdTimes.length
-        : 0;
+      this.stats.holdCount > 0 ? this.stats.holdTimeTotal / this.stats.holdCount : 0;
 
     return {
       totalLocks: this.stats.totalLocks,

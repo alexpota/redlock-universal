@@ -233,6 +233,20 @@ describe('LockManager', () => {
     });
   });
 
+  describe('releaseBatch', () => {
+    it('should release handles without node metadata on the first node', async () => {
+      const manager = new LockManager({
+        nodes: [new MockRedisAdapter('node-0'), new MockRedisAdapter('node-1')],
+      });
+      const withoutNodes = await manager.acquireLock('legacy-key-1');
+      const { metadata, ...withoutMetadata } = await manager.acquireLock('legacy-key-2');
+
+      expect(withoutNodes.metadata?.nodes).toBeUndefined();
+      expect(metadata).toBeDefined();
+      expect(await manager.releaseBatch([withoutNodes, withoutMetadata])).toEqual([true, true]);
+    });
+  });
+
   describe('getActiveLocks', () => {
     it('should return list of active locks', async () => {
       const adapter = new MockRedisAdapter();
