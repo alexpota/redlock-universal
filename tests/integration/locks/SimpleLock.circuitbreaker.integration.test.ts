@@ -5,37 +5,59 @@ import type { RedisAdapter } from '../../../src/types/adapters.js';
 import { generateTestKey } from '../../shared/constants.js';
 import { execSync } from 'node:child_process';
 
-const INTEGRATION_TEST_TIMEOUT = 30000;
+const DOCKER_CHECK_TIMEOUT = 10_000;
+// Starting redis-2 can include pulling the image on a fresh CI runner
+const COMPOSE_START_TIMEOUT = 120_000;
+const COMPOSE_STOP_TIMEOUT = 30_000;
+const REDIS_READY_TIMEOUT = 30_000;
+const REDIS_PING_TIMEOUT = 2_000;
+const REDIS_READY_POLL_INTERVAL = 500;
+const TEST_BODY_TIMEOUT = 30_000;
+const SETUP_TIMEOUT = COMPOSE_START_TIMEOUT + REDIS_READY_TIMEOUT;
+const INTEGRATION_TEST_TIMEOUT = COMPOSE_STOP_TIMEOUT + SETUP_TIMEOUT + TEST_BODY_TIMEOUT;
+
+function isDockerComposeAvailable(): boolean {
+  try {
+    execSync('docker info --format "{{.ServerVersion}}"', {
+      stdio: 'pipe',
+      timeout: DOCKER_CHECK_TIMEOUT,
+    });
+    execSync('docker compose version', { stdio: 'pipe', timeout: DOCKER_CHECK_TIMEOUT });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function stopRedis(): void {
   execSync('docker compose -f docker-compose.test.yml stop redis-2', {
     stdio: 'pipe',
-    timeout: 10000,
+    timeout: COMPOSE_STOP_TIMEOUT,
   });
 }
 
 function startRedis(): void {
   execSync('docker compose -f docker-compose.test.yml up -d redis-2', {
     stdio: 'pipe',
-    timeout: 10000,
+    timeout: COMPOSE_START_TIMEOUT,
   });
 }
 
-function waitForRedisReady(maxWaitMs = 10000): Promise<void> {
+function waitForRedisReady(maxWaitMs = REDIS_READY_TIMEOUT): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const check = () => {
       try {
         execSync('docker compose -f docker-compose.test.yml exec -T redis-2 redis-cli ping', {
           stdio: 'pipe',
-          timeout: 2000,
+          timeout: REDIS_PING_TIMEOUT,
         });
         resolve();
       } catch {
         if (Date.now() - start > maxWaitMs) {
           reject(new Error('Redis did not become ready in time'));
         } else {
-          setTimeout(check, 500);
+          setTimeout(check, REDIS_READY_POLL_INTERVAL);
         }
       }
     };
@@ -43,7 +65,10 @@ function waitForRedisReady(maxWaitMs = 10000): Promise<void> {
   });
 }
 
-describe('SimpleLock Circuit Breaker Integration Tests', () => {
+// Skip only outside CI: in CI a missing Docker setup must fail the suite, not hide it
+const skipWithoutDocker = !process.env.CI && !isDockerComposeAvailable();
+
+describe.skipIf(skipWithoutDocker)('SimpleLock Circuit Breaker Integration Tests', () => {
   let client: ReturnType<typeof createNodeRedisClient>;
   let adapter: RedisAdapter;
 
@@ -56,7 +81,7 @@ describe('SimpleLock Circuit Breaker Integration Tests', () => {
     client.on('error', () => {});
     await client.connect();
     adapter = new NodeRedisAdapter(client);
-  });
+  }, SETUP_TIMEOUT);
 
   afterAll(async () => {
     try {
@@ -66,7 +91,7 @@ describe('SimpleLock Circuit Breaker Integration Tests', () => {
       // Best effort restore
     }
     await client?.disconnect().catch(() => {});
-  });
+  }, SETUP_TIMEOUT);
 
   it(
     'should open breaker during outage and recover after Redis restarts',
