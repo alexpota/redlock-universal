@@ -11,13 +11,29 @@ permissions:
 
 jobs:
   cluster:
-    name: Cluster (${{ matrix.server }}, ${{ matrix.clients.name }})
+    name: Cluster (${{ matrix.server.name }}, ${{ matrix.clients.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Standalone server for the client-option tests that run next to the cluster tests
+    services:
+      standalone:
+        image: ${{ matrix.server.image }}
+        ports:
+          - 127.0.0.1:6379:6379
+        options: >-
+          --health-cmd "${{ matrix.server.name }}-cli ping"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
     strategy:
       matrix:
-        server: [redis, valkey]
+        server:
+          - name: redis
+            image: redis:7-alpine
+          - name: valkey
+            image: valkey/valkey:8-alpine
         clients:
           - name: dev dependencies
             install: ''
@@ -54,10 +70,13 @@ jobs:
     - name: Start cluster
       run: scripts/test-cluster.sh up "$SERVER" >> "$GITHUB_ENV"
       env:
-        SERVER: ${{ matrix.server }}
+        SERVER: ${{ matrix.server.name }}
 
-    - name: Test - Cluster
-      run: npx vitest --run tests/integration/cluster
+    - name: Test - Cluster and client options
+      run: >-
+        npx vitest --run tests/integration/cluster
+        tests/integration/adapters/RedisAdapters.script-cache.integration.test.ts
+        tests/integration/adapters/RedisAdapters.key-prefix.integration.test.ts
 
     - name: Stop cluster
       if: always()

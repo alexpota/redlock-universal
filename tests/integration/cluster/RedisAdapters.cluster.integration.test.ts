@@ -27,6 +27,8 @@ const FLUSH_ROUNDS = 10;
 const CYCLES_PER_FLUSH = 5;
 const REQUEST_TIMEOUT_MS = 3_000;
 const TEST_TIMEOUT_MS = 60_000;
+/** Set on the client, not on the adapter (node-redis applies it from 6.1) */
+const CLIENT_KEY_PREFIX = 'client-prefix:';
 
 interface Target {
   readonly adapter: RedisAdapter;
@@ -38,29 +40,36 @@ interface ClosableNodeRedisCluster {
   quit?: () => Promise<unknown>;
 }
 
+async function ioredisCluster(keyPrefix?: string): Promise<Target> {
+  const cluster = new Cluster(CLUSTER_NODES, keyPrefix ? { keyPrefix } : {});
+  await new Promise<void>((resolve, reject) => {
+    cluster.once('ready', resolve);
+    cluster.once('error', reject);
+  });
+  return { adapter: new IoredisAdapter(cluster), close: async () => cluster.disconnect() };
+}
+
+async function nodeRedisCluster(keyPrefix?: string): Promise<Target> {
+  const cluster = createCluster({
+    rootNodes: CLUSTER_NODES.map(({ host, port }) => ({ url: `redis://${host}:${port}` })),
+    ...(keyPrefix && { keyPrefix }),
+  });
+  await cluster.connect();
+  // close() since node-redis 5, quit() before
+  const closable = cluster as unknown as ClosableNodeRedisCluster;
+  return {
+    adapter: new NodeRedisAdapter(cluster),
+    close: async () => {
+      await (closable.close ?? closable.quit)?.call(cluster);
+    },
+  };
+}
+
 const TARGETS: Record<string, () => Promise<Target>> = {
-  'ioredis Cluster': async () => {
-    const cluster = new Cluster(CLUSTER_NODES);
-    await new Promise<void>((resolve, reject) => {
-      cluster.once('ready', resolve);
-      cluster.once('error', reject);
-    });
-    return { adapter: new IoredisAdapter(cluster), close: async () => cluster.disconnect() };
-  },
-  'node-redis cluster': async () => {
-    const cluster = createCluster({
-      rootNodes: CLUSTER_NODES.map(({ host, port }) => ({ url: `redis://${host}:${port}` })),
-    });
-    await cluster.connect();
-    // close() since node-redis 5, quit() before
-    const closable = cluster as unknown as ClosableNodeRedisCluster;
-    return {
-      adapter: new NodeRedisAdapter(cluster),
-      close: async () => {
-        await (closable.close ?? closable.quit)?.call(cluster);
-      },
-    };
-  },
+  'ioredis Cluster': () => ioredisCluster(),
+  'ioredis Cluster with a client key prefix': () => ioredisCluster(CLIENT_KEY_PREFIX),
+  'node-redis cluster': () => nodeRedisCluster(),
+  'node-redis cluster with a client key prefix': () => nodeRedisCluster(CLIENT_KEY_PREFIX),
   'GLIDE cluster': async () => {
     const client = await GlideClusterClient.createClient({
       addresses: CLUSTER_NODES,

@@ -29,7 +29,8 @@ export function isNoScriptError(error: unknown): boolean {
 /**
  * Runs a Lua script by its SHA1 digest, computed locally and kept in `shaCache`.
  * If the node does not have the script (first use, restart, failover, SCRIPT FLUSH),
- * the script is sent once more as EVAL.
+ * the script is sent once more as EVAL. Redis 7.4+ and Valkey 8+ can also evict scripts
+ * cached by EVAL once more than 500 are cached; the same fallback covers that.
  * @internal
  */
 export async function executeScript<T>(

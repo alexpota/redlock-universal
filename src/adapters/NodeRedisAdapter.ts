@@ -35,10 +35,18 @@ type FlexibleRedisClient = any;
  */
 export class NodeRedisAdapter extends BaseAdapter {
   private readonly client: FlexibleRedisClient;
+  /**
+   * node-redis 4 cluster clients (the only ones with a static `extractFirstKey`) pass the
+   * script to `extractFirstKey` where it expects the options, so evalSha()/EVAL() reach a
+   * random node. node-redis 4 has no client key prefix, so raw commands are safe there.
+   */
+  private readonly routesScriptsByHand: boolean;
 
   constructor(client: FlexibleRedisClient, options: RedisAdapterOptions = {}) {
     super(options);
     this.client = client;
+    this.routesScriptsByHand =
+      'masters' in client && typeof client.constructor?.extractFirstKey === 'function';
   }
 
   /**
@@ -58,18 +66,25 @@ export class NodeRedisAdapter extends BaseAdapter {
     keys: string[],
     args: (string | number)[]
   ): Promise<T> {
-    const scriptArgs = [keys.length.toString(), ...keys, ...args.map(a => a.toString())];
+    const stringArgs = args.map(a => a.toString());
 
-    // Both commands go through sendCommand: node-redis 4 cluster clients route evalSha()
-    // without its keys. Cluster clients (they expose `masters`) take the routing key first.
-    const send = (command: string[]): Promise<T> =>
-      ('masters' in this.client
-        ? this.client.sendCommand(keys[0], false, command)
-        : this.client.sendCommand(command)) as Promise<T>;
+    if (this.routesScriptsByHand) {
+      const scriptArgs = [keys.length.toString(), ...keys, ...stringArgs];
+      const send = (command: string[]): Promise<T> =>
+        this.client.sendCommand(keys[0], false, command) as Promise<T>;
 
+      return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+        evalSha: sha => this.withTimeout(send(['EVALSHA', sha, ...scriptArgs])),
+        evalScript: () => this.withTimeout(send(['EVAL', scriptBody, ...scriptArgs])),
+      });
+    }
+
+    // Typed commands keep the client's own key handling: key prefix (node-redis 6.1+)
+    // and cluster routing
+    const scriptOptions = { keys, arguments: stringArgs };
     return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
-      evalSha: sha => this.withTimeout(send(['EVALSHA', sha, ...scriptArgs])),
-      evalScript: () => this.withTimeout(send(['EVAL', scriptBody, ...scriptArgs])),
+      evalSha: sha => this.withTimeout(this.client.evalSha(sha, scriptOptions) as Promise<T>),
+      evalScript: () => this.withTimeout(this.client.EVAL(scriptBody, scriptOptions) as Promise<T>),
     });
   }
 

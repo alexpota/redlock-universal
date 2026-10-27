@@ -36,7 +36,6 @@ const createMockNodeRedisClient = () => ({
   eval: vi.fn(),
   evalSha: vi.fn(),
   scriptLoad: vi.fn(),
-  sendCommand: vi.fn(),
   isReady: true,
 });
 
@@ -58,7 +57,7 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle successful atomic extension', async () => {
-      mockClient.sendCommand.mockResolvedValueOnce([
+      mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.SUCCESS,
         ATOMIC_EXTENSION_CONFIG.SUCCESSFUL_REMAINING,
       ]);
@@ -77,22 +76,18 @@ describe('Atomic Extension Tests', () => {
       });
 
       expect(mockClient.scriptLoad).not.toHaveBeenCalled();
-      expect(mockClient.sendCommand).toHaveBeenCalledWith([
-        'EVALSHA',
-        scriptSha(ATOMIC_EXTEND_SCRIPT),
-        '1',
-        TEST_VALUES.KEY,
-        TEST_VALUES.VALUE,
-        TEST_CONFIG.TTL_BUFFER.toString(),
-        ATOMIC_EXTENSION_CONFIG.STANDARD_TTL.toString(),
-      ]);
+      expect(mockClient.evalSha).toHaveBeenCalledWith(scriptSha(ATOMIC_EXTEND_SCRIPT), {
+        keys: [TEST_VALUES.KEY],
+        arguments: [
+          TEST_VALUES.VALUE,
+          TEST_CONFIG.TTL_BUFFER.toString(),
+          ATOMIC_EXTENSION_CONFIG.STANDARD_TTL.toString(),
+        ],
+      });
     });
 
     it('should handle race condition (too late to extend)', async () => {
-      mockClient.sendCommand.mockResolvedValueOnce([
-        RESULT_CODES.TOO_LATE,
-        TIMING_CONFIG.DELAY_TINY,
-      ]);
+      mockClient.evalSha.mockResolvedValueOnce([RESULT_CODES.TOO_LATE, TIMING_CONFIG.DELAY_TINY]);
 
       const result = await adapter.atomicExtend(
         TEST_VALUES.KEY,
@@ -109,7 +104,7 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle lock value mismatch', async () => {
-      mockClient.sendCommand.mockResolvedValueOnce([
+      mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.VALUE_MISMATCH,
         ATOMIC_EXTENSION_CONFIG.STOLEN_LOCK_TTL,
       ]);
@@ -129,7 +124,7 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle key not exists', async () => {
-      mockClient.sendCommand.mockResolvedValueOnce([
+      mockClient.evalSha.mockResolvedValueOnce([
         RESULT_CODES.VALUE_MISMATCH,
         RESULT_CODES.KEY_NOT_EXISTS,
       ]);
@@ -187,7 +182,7 @@ describe('Atomic Extension Tests', () => {
     });
 
     it('should handle Redis errors', async () => {
-      mockClient.sendCommand.mockRejectedValueOnce(new Error('Redis connection failed'));
+      mockClient.evalSha.mockRejectedValueOnce(new Error('Redis connection failed'));
 
       await expect(
         adapter.atomicExtend(
@@ -283,7 +278,7 @@ describe('Atomic Extension Tests', () => {
       const mockClient = createMockNodeRedisClient();
       const adapter = new NodeRedisAdapter(mockClient as any);
 
-      mockClient.sendCommand.mockResolvedValue([
+      mockClient.evalSha.mockResolvedValue([
         RESULT_CODES.SUCCESS,
         ATOMIC_EXTENSION_CONFIG.SUCCESSFUL_REMAINING,
       ]);
@@ -318,7 +313,7 @@ describe('Atomic Extension Tests', () => {
       expect(avgTime).toBeLessThan(TIMING_CONFIG.UNIT_QUICK_DELAY);
 
       expect(mockClient.scriptLoad).not.toHaveBeenCalled();
-      expect(mockClient.sendCommand).toHaveBeenCalledTimes(
+      expect(mockClient.evalSha).toHaveBeenCalledTimes(
         ATOMIC_EXTENSION_CONFIG.PERFORMANCE_ITERATIONS
       );
     });
