@@ -1,6 +1,6 @@
 {
   "name": "redlock-universal",
-  "version": "0.8.5",
+  "version": "0.8.7",
   "description": "Production-ready distributed locks for Redis and Valkey with support for node-redis, ioredis, and Valkey GLIDE",
   "keywords": [
     "redis",
@@ -39,16 +39,23 @@
     "url": "https://github.com/alexpota/redlock-universal/issues"
   },
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./dist/index.d.cts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    }
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "README.md",
@@ -75,6 +82,7 @@
     "benchmark:competitive": "vitest --run tests/benchmarks/locks.competitive.benchmark.test.ts",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
+    "lint:package": "publint --strict && attw --pack .",
     "type-check": "tsc --noEmit",
     "format": "prettier --write src/**/*.ts tests/**/*.ts",
     "format:check": "prettier --check src/**/*.ts tests/**/*.ts",
@@ -137,6 +145,7 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.26.0",
@@ -158,6 +167,7 @@
     "ioredis": "^5.11.1",
     "lint-staged": "^16.4.0",
     "prettier": "^3.9.4",
+    "publint": "^0.3.25",
     "redis": "^4.7.0",
     "redis-semaphore": "^5.7.0",
     "redlock": "^5.0.0-beta.2",

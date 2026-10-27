@@ -22,7 +22,7 @@ Describe the use case for this feature. How would it be used?
 ```typescript
 // Example of how the feature would be used
 const lock = createLock({
-  client: redisClient,
+  adapter: new NodeRedisAdapter(redisClient),
   key: 'resource',
   // New feature usage
   newFeature: true

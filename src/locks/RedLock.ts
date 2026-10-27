@@ -7,7 +7,7 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, RedLockConfig } from '../types/locks.js';
 import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
-import { generateLockId, generateLockValue, safeCompare } from '../utils/crypto.js';
+import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
@@ -105,6 +105,8 @@ export class RedLock implements Lock {
     for (let attempt = 0; attempt <= this.config.retryAttempts; attempt++) {
       try {
         const lockValue = generateLockValue();
+        // Each node starts the TTL when it receives the request, so the lock is valid from here
+        const attemptStartedAt = Date.now();
         const result = await this.attemptLockAcquisition(lockValue);
 
         if (result.success) {
@@ -113,7 +115,7 @@ export class RedLock implements Lock {
             id: generateLockId(),
             key: this.config.key,
             value: lockValue,
-            acquiredAt: Date.now(),
+            acquiredAt: attemptStartedAt,
             ttl: this.config.ttl,
             metadata: {
               attempts: attempt + 1,
@@ -298,22 +300,8 @@ export class RedLock implements Lock {
     }
 
     try {
-      // Check current lock values on all nodes first
-      const checkPromises = this.adapters.map(adapter => adapter.get(handle.key));
-      const checkResults = await Promise.allSettled(checkPromises);
-
-      const validNodes = checkResults.filter(result => {
-        if (result.status === 'rejected') return false;
-        const value = result.value;
-        return value !== null && safeCompare(value, handle.value);
-      });
-
-      // Need quorum of nodes to have valid lock value
-      if (validNodes.length < this.config.quorum) {
-        return false;
-      }
-
-      // Extend TTL on all nodes using extendIfMatch for atomicity
+      // extendIfMatch checks ownership atomically on each node, so a separate read round
+      // would only delay the extension until the slowest node replies
       const extendPromises = this.adapters.map(adapter =>
         adapter.extendIfMatch(handle.key, handle.value, ttl)
       );
