@@ -75,6 +75,7 @@
     "benchmark:competitive": "vitest --run tests/benchmarks/locks.competitive.benchmark.test.ts",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
+    "lint:package": "publint --strict && attw --pack .",
     "type-check": "tsc --noEmit",
     "format": "prettier --write src/**/*.ts tests/**/*.ts",
     "format:check": "prettier --check src/**/*.ts tests/**/*.ts",
@@ -137,6 +138,7 @@
     }
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.26.0",
@@ -158,6 +160,7 @@
     "ioredis": "^5.11.1",
     "lint-staged": "^16.4.0",
     "prettier": "^3.9.4",
+    "publint": "^0.3.25",
     "redis": "^4.7.0",
     "redis-semaphore": "^5.7.0",
     "redlock": "^5.0.0-beta.2",
