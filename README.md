@@ -205,6 +205,15 @@ const client = await GlideClient.createClient({ addresses: [{ host: 'localhost',
 const adapter = new GlideAdapter(client);
 ```
 
+> **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
+
+> [!IMPORTANT]
+> **Cluster vs Redlock:**
+> - **Redis Cluster**: Provides High Availability (HA). If a master fails, a replica takes over. *Warning: Locks can be lost during failover (eventual consistency).*
+> - **Redlock**: Provides Consensus. Locks are safe even if nodes crash. Use for critical consistency.
+>
+> See [Cluster Usage Examples](./examples/redis-cluster-usage.ts) for details.
+
 ### Key Prefix
 
 Every adapter accepts a `keyPrefix` option. It is prepended to each lock key exactly as given, without a separator, so include one yourself:
@@ -215,15 +224,6 @@ const adapter = new NodeRedisAdapter(client, { keyPrefix: 'myapp:' });
 ```
 
 Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the prefix.
-
-> **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
-
-> [!IMPORTANT]
-> **Cluster vs Redlock:**
-> - **Redis Cluster**: Provides High Availability (HA). If a master fails, a replica takes over. *Warning: Locks can be lost during failover (eventual consistency).*
-> - **Redlock**: Provides Consensus. Locks are safe even if nodes crash. Use for critical consistency.
->
-> See [Cluster Usage Examples](./examples/redis-cluster-usage.ts) for details.
 
 ## Configuration
 
