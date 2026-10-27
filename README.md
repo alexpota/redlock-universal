@@ -205,6 +205,17 @@ const client = await GlideClient.createClient({ addresses: [{ host: 'localhost',
 const adapter = new GlideAdapter(client);
 ```
 
+### Key Prefix
+
+Every adapter accepts a `keyPrefix` option. It is prepended to each lock key exactly as given, without a separator, so include one yourself:
+
+```typescript
+const adapter = new NodeRedisAdapter(client, { keyPrefix: 'myapp:' });
+// The lock key 'orders:42' is stored in Redis as 'myapp:orders:42'
+```
+
+Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the prefix.
+
 > **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
 
 > [!IMPORTANT]
