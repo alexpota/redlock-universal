@@ -112,6 +112,7 @@ jobs:
           --health-retries 5
 
     strategy:
+      fail-fast: false
       matrix:
         logger: [winston, pino, bunyan]
 
@@ -144,7 +145,7 @@ jobs:
       run: npm run build
 
     - name: Test - Logger Integration (${{ matrix.logger }})
-      run: npm run test:integration
+      run: npx vitest --run tests/integration/logger-${{ matrix.logger }}.integration.test.ts
       env:
         NODE_ENV: test
 
