@@ -30,7 +30,7 @@
   ],
   "author": "Alex Potapenko <alex.potapenko.dev@gmail.com>",
   "license": "MIT",
-  "homepage": "https://github.com/alexpota/redlock-universal#readme",
+  "homepage": "https://redlock-universal.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alexpota/redlock-universal.git"
@@ -89,7 +89,7 @@
     "validate": "npm run type-check && npm run lint && npm run format:check && npm run build && npm test",
     "validate:full": "npm run type-check && npm run lint && npm run format:check && npm run build && npm test && npm run test:integration",
     "clean": "rm -rf dist",
-    "docs": "typedoc src/index.ts",
+    "docs": "typedoc",
     "prepare": "husky",
     "prepublishOnly": "npm run clean && npm run build && npm test && npm run lint",
     "commit": "cz",

@@ -54,3 +54,4 @@ temp/
 # Documentation output
 docs/
 typedoc/
+site/
