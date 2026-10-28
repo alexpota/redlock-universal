@@ -1,0 +1,32 @@
+# redlock-universal
+
+> Distributed locks for Node.js on Redis and Valkey, with node-redis, ioredis or Valkey GLIDE: single-server locks, the Redlock algorithm across independent servers, atomic locking of several keys on one server, and automatic extension with an AbortSignal that reports a lost lock. TypeScript types, ESM and CommonJS builds, no runtime dependencies, Node.js 22 or later.
+
+Facts to keep in mind:
+
+- Wrap the Redis client in an adapter (`NodeRedisAdapter`, `IoredisAdapter` or `GlideAdapter`), then create one lock per key: `createLock({ adapter, key, ttl })` for one server or one Cluster client, `createRedlock({ adapters, key, ttl })` for several independent servers. The API differs from the `redlock` package: there is no `new Redlock(clients)` and no `acquire([resources], ttl)`.
+- `createRedlock` takes `adapters`; `LockManager` takes `nodes`.
+- `lock.using(async (signal) => { ... })` acquires the lock, extends it when 20% of its TTL remains, and releases it afterwards. If an extension fails, `signal.aborted` becomes `true` and `signal.error` holds the cause; the callback keeps running.
+- `release(handle)` and `extend(handle, ttl)` resolve `false` when the lock is gone. `extend()` sets the TTL to the given value from now.
+- `retryAttempts` counts retries after the first attempt. Defaults: TTL 30000 ms, 3 retries, 100 ms delay (200 ms for `createRedlock`), 5000 ms per Redis command.
+- Several keys at once: `LockManager` `acquireBatch()` and `usingBatch()`, atomic on one server; on Redis Cluster the keys must share a hash slot.
+- No fencing tokens. Use these locks to avoid duplicate or overlapping work; read the safety guide before using a lock to protect correctness.
+
+## Docs
+
+- [Overview and usage](https://redlock-universal.dev/): installation, quick start, `using()`, Redlock, Cluster, configuration, error handling, FAQ
+- [Safety](https://redlock-universal.dev/documents/SAFETY.html): what single-server and Redlock locks guarantee, when a lost lock is noticed, protecting the resource, alternatives
+- [Valkey](https://github.com/alexpota/redlock-universal/blob/main/VALKEY.md): Valkey with node-redis, ioredis or Valkey GLIDE, versions tested in CI
+
+## API reference
+
+- [createLock](https://redlock-universal.dev/functions/index.createLock.html): single-server lock
+- [createRedlock](https://redlock-universal.dev/functions/index.createRedlock.html): Redlock across independent servers
+- [LockManager](https://redlock-universal.dev/classes/index.LockManager.html): several keys at once, lock statistics
+- [IoredisAdapter](https://redlock-universal.dev/classes/index.IoredisAdapter.html), [NodeRedisAdapter](https://redlock-universal.dev/classes/index.NodeRedisAdapter.html), [GlideAdapter](https://redlock-universal.dev/classes/index.GlideAdapter.html): client adapters
+- [LockAcquisitionError](https://redlock-universal.dev/classes/index.LockAcquisitionError.html): thrown when a lock is not acquired (`code` `LOCK_ACQUISITION_FAILED`)
+
+## Optional
+
+- [Release notes](https://github.com/alexpota/redlock-universal/releases)
+- [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal): NestJS module

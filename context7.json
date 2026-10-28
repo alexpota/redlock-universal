@@ -1,0 +1,18 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "redlock-universal",
+  "description": "Distributed locks for Node.js on Redis and Valkey: single-server locks, Redlock across independent servers, atomic multi-key locks on one server, automatic extension with an AbortSignal. Works with node-redis, ioredis and Valkey GLIDE.",
+  "branch": "main",
+  "excludeFolders": ["tests", "scripts", ".github", "examples"],
+  "excludeFiles": ["CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "TESTING.md"],
+  "rules": [
+    "Wrap the Redis client in NodeRedisAdapter, IoredisAdapter or GlideAdapter and pass it as adapter (createLock) or adapters (createRedlock).",
+    "createLock and createRedlock return one lock object per key; call acquire(), using(), extend(handle, ttl) and release(handle) on it.",
+    "The API differs from the redlock package: there is no new Redlock(clients) and no acquire([resources], ttl).",
+    "Prefer lock.using(async (signal) => { ... }); the cause of a lost lock is in signal.error.",
+    "release() and extend() resolve false when the lock is gone; they reject on Redis errors and invalid arguments.",
+    "LockManager acquireBatch and usingBatch lock several keys atomically on one server; on Redis Cluster all keys must share a hash slot.",
+    "createRedlock takes adapters; LockManager takes nodes.",
+    "The library issues no fencing tokens; if correctness depends on the lock, also make the write conditional in the data store."
+  ]
+}
