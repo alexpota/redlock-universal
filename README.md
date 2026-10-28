@@ -1,26 +1,32 @@
 # redlock-universal
 
-> Universal distributed locks for Redis and Valkey
+> Distributed locks for Redis and Valkey: node-redis, ioredis or Valkey GLIDE
 
 [![npm version](https://img.shields.io/npm/v/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 [![Node.js](https://img.shields.io/node/v/redlock-universal.svg)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Test Coverage](https://img.shields.io/badge/coverage-86%25-green.svg)](#testing)
+[![TypeScript](https://img.shields.io/badge/TypeScript-types%20included-blue.svg)](https://www.typescriptlang.org/)
+[![Test Coverage](https://img.shields.io/badge/coverage-%E2%89%A586%25%20lines-green.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Downloads](https://img.shields.io/npm/dm/redlock-universal.svg)](https://www.npmjs.com/package/redlock-universal)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/alexpota)
 
-The only distributed lock library supporting **all three** Redis clients:
+Distributed locks for Node.js on the Redis or Valkey you already run, with the client you already use:
 
 **node-redis** &bull; **ioredis** &bull; **Valkey GLIDE**
+
+Requires Node.js 22 or later. CI runs the test suite with node-redis and ioredis against Redis 7 and Valkey 8, the Valkey GLIDE adapter tests against Valkey 8, and the cluster tests with all three clients against Redis 7 and Valkey 8 clusters.
 
 > <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
 
 ## Quick Start
 
+```bash
+npm install redlock-universal ioredis
+```
+
 ```typescript
 import { createLock, IoredisAdapter } from 'redlock-universal';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 const lock = createLock({
   adapter: new IoredisAdapter(new Redis()),
@@ -28,27 +34,22 @@ const lock = createLock({
   ttl: 30000,
 });
 
-// Automatic lock management with auto-extension
-await lock.using(async () => {
-  // Critical section - lock auto-extends and releases
+// Acquires the lock, extends it while the callback runs, then releases it
+await lock.using(async (signal) => {
+  // Critical section: signal.aborted turns true if the lock is lost
 });
 ```
 
-```bash
-npm install redlock-universal
-```
+A lock prevents most duplicate work, but on its own it cannot guarantee that only one process acts at a time. Read [SAFETY.md](SAFETY.md) before you rely on a lock for correctness.
 
 ## Why redlock-universal?
 
-Same performance as the fastest libraries, with universal client support they lack.
-
-| Library | Latency | node-redis | ioredis | Valkey | Monitoring |
-|---------|---------|:----------:|:-------:|:------:|:----------:|
-| redis-semaphore | 0.369ms | ❌ | ✅ | ❌ | ❌ |
-| **redlock-universal** | **0.377ms** | **✅** | **✅** | **✅** | **✅** |
-| node-redlock | 0.398ms | ❌ | ✅ | ❌ | ❌ |
-
-<sub>Benchmarked on local Redis 7 (macOS, Node.js 22). Results vary with system load, network, and Redis configuration. All libraries deliver competitive sub-millisecond performance.</sub>
+- **Three clients, one API.** Adapters for node-redis, ioredis and Valkey GLIDE, on Redis or Valkey, standalone or Cluster. [VALKEY.md](VALKEY.md#compatibility-matrix) lists the versions tested in CI.
+- **One server or several.** `createLock()` locks on one server; `createRedlock()` runs the Redlock algorithm across independent servers.
+- **Automatic extension.** `using()` extends the lock while your callback runs and aborts an `AbortSignal` when an extension fails.
+- **Atomic multi-key locks.** `LockManager.acquireBatch()` takes all of the keys or none of them, on one server.
+- **Operational helpers.** A circuit breaker for unreachable servers, lock statistics, a logger interface with Pino and Bunyan adapters, and an in-memory adapter for tests.
+- **Packaging.** ESM and CommonJS builds with TypeScript types and no runtime dependencies. Releases are published from GitHub Actions with npm provenance.
 
 ## Installation
 
@@ -65,20 +66,21 @@ npm install @valkey/valkey-glide
 
 ### using() - Recommended
 
-Auto-extends lock and guarantees cleanup:
+Extends the lock while the callback runs and releases it when the callback settles:
 
 ```typescript
 const result = await lock.using(async (signal) => {
   // Long-running operation
   await processData();
 
-  // Check if lock was lost (optional)
+  // Stop if the lock was lost
   if (signal.aborted) {
-    throw new Error('Lock lost');
+    throw signal.error ?? new Error('Lock lost');
   }
 
   return 'done';
 });
+// using() returns the callback's value: result === 'done'
 ```
 
 ### acquire() / release() - Manual Control
@@ -96,13 +98,15 @@ try {
 
 ```typescript
 const handle = await lock.acquire();
-// Extend lock by 10 seconds
+// Set the lock's TTL to 10 seconds from now
 const extended = await lock.extend(handle, 10000);
 if (extended) {
   // Continue working with extended TTL
 }
 await lock.release(handle);
 ```
+
+`extend()` sets the remaining TTL to the given value; it does not add to it. It returns `false` when the lock has expired or another client holds it.
 
 <details>
 <summary><strong>Extending locks acquired via LockManager</strong></summary>
@@ -146,13 +150,15 @@ await lock.extend(handle, 30000);
 ```typescript
 const locked = await lock.isLocked('my-resource');
 if (!locked) {
-  // Safe to acquire
+  // The key was free when it was checked
 }
 ```
 
+`isLocked()` is informational: another client can acquire the key right after the check, and a Redis error also reads as `false`. To take the lock, call `acquire()`.
+
 ### Distributed Lock (Redlock Algorithm)
 
-For fault-tolerant locking across multiple Redis instances using the [Redlock algorithm](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/):
+To keep locks available while some servers are down, use the [Redlock algorithm](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/) across three or more independent Redis or Valkey servers:
 
 ```typescript
 import { createRedlock, IoredisAdapter } from 'redlock-universal';
@@ -169,17 +175,19 @@ const redlock = createRedlock({
 });
 
 await redlock.using(async () => {
-  // Distributed consensus - survives node failures
+  // Held on a quorum (here 2 of 3) of the servers
 });
 ```
 
+Redlock keeps working while a minority of the servers is down. It is not a consensus protocol: see [SAFETY.md](SAFETY.md) for what it does and does not guarantee.
+
 ## Adapters & Cluster Support
 
-Fully supports Redis Cluster via both ioredis and node-redis.
+Works with the Redis Cluster clients of ioredis, node-redis and Valkey GLIDE. CI runs the cluster tests, covering the lock commands and script reloading, on three-primary Redis 7 and Valkey 8 clusters.
 
 ```typescript
 // ioredis
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 const adapter = new IoredisAdapter(new Redis());
 
 // ioredis Cluster
@@ -203,16 +211,23 @@ const adapter = new NodeRedisAdapter(cluster);
 import { GlideClient } from '@valkey/valkey-glide';
 const client = await GlideClient.createClient({ addresses: [{ host: 'localhost', port: 6379 }] });
 const adapter = new GlideAdapter(client);
+
+// Valkey GLIDE Cluster
+import { GlideClusterClient } from '@valkey/valkey-glide';
+const cluster = await GlideClusterClient.createClient({ addresses: [{ host: 'node-1', port: 6379 }] });
+const adapter = new GlideAdapter(cluster);
 ```
+
+On a cluster, the keys passed to `acquireBatch()` or `usingBatch()` are written by one script, so they must hash to one slot. Give them a shared hash tag, such as `{order:42}:payment` and `{order:42}:stock`.
 
 > **Valkey Users:** See [VALKEY.md](VALKEY.md) for detailed Valkey setup guide.
 
 > [!IMPORTANT]
 > **Cluster vs Redlock:**
-> - **Redis Cluster**: Provides High Availability (HA). If a master fails, a replica takes over. *Warning: Locks can be lost during failover (eventual consistency).*
-> - **Redlock**: Provides Consensus. Locks are safe even if nodes crash. Use for critical consistency.
+> - **Redis Cluster** (like Sentinel or any primary with replicas): each lock lives on one primary, and a replica takes over if that primary fails. Replication is asynchronous, so a failover can lose a lock that was just written, and another client can then acquire it.
+> - **Redlock**: each lock is written to a majority of independent servers, so it survives the loss of a minority of them. It is not consensus: clock jumps, long process pauses and restarts without persistence can still let two clients hold the same lock.
 >
-> See [Cluster Usage Examples](./examples/redis-cluster-usage.ts) for details.
+> Neither makes a lock safe for correctness on its own. See [SAFETY.md](SAFETY.md), and the [Cluster Usage Examples](./examples/redis-cluster-usage.ts).
 
 ### Key Prefix
 
@@ -223,7 +238,7 @@ const adapter = new NodeRedisAdapter(client, { keyPrefix: 'myapp:' });
 // The lock key 'orders:42' is stored in Redis as 'myapp:orders:42'
 ```
 
-Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the prefix.
+Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the adapter's prefix, except the message of `signal.error` after a failed extension, which shows the key as stored.
 
 ## Configuration
 
@@ -232,9 +247,9 @@ interface CreateLockConfig {
   adapter: RedisAdapter;
   key: string;
   ttl?: number;              // Default: 30000ms
-  retryAttempts?: number;    // Default: 3
+  retryAttempts?: number;    // Default: 3 (retries after the first attempt)
   retryDelay?: number;       // Default: 100ms
-  performance?: 'standard' | 'lean' | 'enterprise';
+  performance?: 'standard' | 'lean' | 'enterprise'; // Default: 'standard'
   logger?: ILogger;          // Optional structured logging
   circuitBreaker?: boolean | CircuitBreakerConfig; // Default: enabled
 }
@@ -243,13 +258,15 @@ interface CreateRedlockConfig {
   adapters: RedisAdapter[];
   key: string;
   ttl?: number;              // Default: 30000ms
-  retryAttempts?: number;    // Default: 3
+  retryAttempts?: number;    // Default: 3 (retries after the first attempt)
   retryDelay?: number;       // Default: 200ms
   quorum?: number;           // Default: Math.floor(adapters.length / 2) + 1
   clockDriftFactor?: number; // Default: 0.01
   logger?: ILogger;          // Optional structured logging
 }
 ```
+
+Each Redis command times out after 5000 ms. To change it, pass `timeout` in the adapter options, for example `new IoredisAdapter(redis, { timeout: 2000 })`.
 
 <details>
 <summary><strong>Advanced: Batch Lock Acquisition</strong></summary>
@@ -261,7 +278,7 @@ import { LockManager } from 'redlock-universal';
 
 const manager = new LockManager({ nodes: [adapter] });
 
-// Atomic batch - prevents deadlocks via automatic key sorting
+// One script takes all keys or none, so concurrent batches cannot deadlock
 const handles = await manager.acquireBatch(['user:1', 'user:2', 'order:3']);
 try {
   await processTransaction();
@@ -269,11 +286,13 @@ try {
   await manager.releaseBatch(handles);
 }
 
-// Or with auto-extension (supports retryAttempts, retryDelay options)
+// Or with auto-extension (supports ttl, retryAttempts, retryDelay options)
 await manager.usingBatch(['key1', 'key2'], async (signal) => {
   // All locks auto-extend and release
 });
 ```
+
+On a cluster, give the keys of one batch a shared hash tag (see [Adapters & Cluster Support](#adapters--cluster-support)).
 
 </details>
 
@@ -310,6 +329,8 @@ const logger = createPinoAdapter(pinoLogger);
 import { createBunyanAdapter } from 'redlock-universal';
 const logger = createBunyanAdapter(bunyanLogger);
 ```
+
+CI runs lock operations with Winston, Pino and Bunyan attached. It does not check the log output.
 
 </details>
 
@@ -386,18 +407,18 @@ const redlocks = createRedlocks(
 <details>
 <summary><strong>Advanced: Performance Modes</strong></summary>
 
-Choose the optimal mode for your use case:
-
 ```typescript
-// Standard (default) - full monitoring and observability
+// Standard (default): circuit breaker, health check and logger support
 const lock = createLock({ adapter, key: 'resource', performance: 'standard' });
 
-// Lean - memory-optimized, minimal overhead (~3% faster)
+// Lean: a smaller lock class with fewer checks (see below)
 const lock = createLock({ adapter, key: 'resource', performance: 'lean' });
 
-// Enterprise - standard with advanced observability
+// Enterprise: currently creates the same lock as 'standard'
 const lock = createLock({ adapter, key: 'resource', performance: 'enterprise' });
 ```
+
+`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). It does not validate its configuration or check handles, and it builds lock values from a timestamp, `Math.random()` and the process ID instead of `crypto`.
 
 </details>
 
@@ -422,74 +443,167 @@ const lock = createLock({
 // Disable entirely:
 const lock = createLock({ adapter, key: 'resource', circuitBreaker: false });
 
-// Check breaker state:
-const health = lock.getHealth();
+// Check breaker state (getHealth() is a SimpleLock method):
+const health = (lock as SimpleLock).getHealth();
 // { healthy, lastCheck, connected, circuitBreaker: { state, failures, openedAt } }
 ```
 
 The circuit breaker is available in `standard` and `enterprise` performance modes. The `lean` mode omits it for minimal memory overhead.
+
+Each lock instance has its own breaker. It health-checks the server with a `PING` before its first `acquire()`, then at most once per `healthCheckInterval`. A failed health check counts as a failure but does not fail the `acquire()`.
 
 </details>
 
 ## Error Handling
 
 ```typescript
-import {
-  LockAcquisitionError,
-  LockReleaseError,
-  LockExtensionError,
-} from 'redlock-universal';
+import { LockAcquisitionError, type LockHandle } from 'redlock-universal';
 
-try {
-  const handle = await lock.acquire();
-  await lock.extend(handle, 10000);
-  await lock.release(handle);
-} catch (error) {
-  if (error instanceof LockAcquisitionError) {
-    // Lock is held by another process
-  } else if (error instanceof LockExtensionError) {
-    // Extension failed (lock expired or lost)
-  } else if (error instanceof LockReleaseError) {
-    // Release failed (handle mismatch or connection issue)
+async function runExclusive(): Promise<void> {
+  let handle: LockHandle;
+  try {
+    handle = await lock.acquire();
+  } catch (error) {
+    if (error instanceof LockAcquisitionError) {
+      // Not acquired. error.cause says why: the key is held,
+      // Redis failed or timed out, or the circuit breaker is open.
+      return;
+    }
+    throw error;
+  }
+
+  try {
+    await doWork();
+  } finally {
+    // false when the lock already expired or another client holds it
+    await lock.release(handle);
   }
 }
 ```
 
+| Call | Result | When |
+|------|--------|------|
+| `acquire()` | throws `LockAcquisitionError` | Not acquired after `retryAttempts` retries: the key is held by another client, Redis failed or timed out (see `error.cause`), or the circuit breaker is open |
+| `release()` | resolves `false` | The lock already expired, or another client holds it |
+| `extend()` | resolves `false` | The lock expired, or another client holds it |
+| `release()` / `extend()` | throws `LockReleaseError` / `LockExtensionError` | Redis returned an error or timed out |
+| any method | throws `Error` | Invalid arguments, such as a handle for a different key (not checked in `lean` mode) |
+
+With `createRedlock()`, `release()` and `extend()` resolve `true` when a quorum of servers succeeded. An error on one server counts as a failure on that server.
+
 ## FAQ
 
-**Q: SimpleLock vs RedLock?**
-SimpleLock = single Redis (faster). RedLock = multiple Redis instances (fault-tolerant).
+**Q: SimpleLock or RedLock?**
+SimpleLock (`createLock()`) uses one server. RedLock (`createRedlock()`) writes to several independent servers and keeps working while a minority of them is down. Neither makes a lock safe for correctness by itself; see [SAFETY.md](SAFETY.md).
+
+**Q: What does `using()` return, and what happens when the callback throws?**
+`using()` returns whatever the callback returns. If the callback throws, `using()` waits for any extension in progress, releases the lock and rethrows the same error. A failed release is not thrown: it is logged if you passed a `logger`, and the lock expires at the end of its TTL.
+
+**Q: How do I notice that the lock was lost?**
+`using()` extends the lock when about 80% of the TTL has passed. If that extension fails, `signal.aborted` becomes `true` and `signal.error` holds the reason. The callback keeps running until it checks the signal, and `using()` still resolves with the callback's value. `signal.reason` and `signal.throwIfAborted()` carry a generic `AbortError`, so read `signal.error`. Without `using()`, nothing extends the lock, and `extend()` and `release()` return `false` once it is gone.
+
+```typescript
+await lock.using(async (signal) => {
+  for (const item of items) {
+    if (signal.aborted) {
+      throw signal.error ?? new Error('Lock lost');
+    }
+    await processItem(item);
+  }
+});
+```
+
+**Q: Can I use a lock as a queue?**
+No. A waiting `acquire()` polls: it retries `retryAttempts` times, `retryDelay` ms apart, then throws `LockAcquisitionError`. Waiters are not served in order, and nothing counts them. If callers must take turns or every job must run exactly once, use a job queue; to allow several holders at once, use a semaphore.
+
+**Q: How do I prevent a cache stampede?**
+Let one caller compute the value while the others wait for its result instead of computing it again. Lock a separate key, check the cache again after acquiring, and wait for the value while the lock is busy:
+
+```typescript
+import { setTimeout as sleep } from 'node:timers/promises';
+import { Redis } from 'ioredis';
+import { createLock, IoredisAdapter, LockAcquisitionError } from 'redlock-universal';
+
+const redis = new Redis();
+const adapter = new IoredisAdapter(redis);
+
+async function getOrCompute(key: string, compute: () => Promise<string>): Promise<string> {
+  const lock = createLock({
+    adapter,
+    key: `lock:${key}`, // never lock the cache key itself
+    ttl: 10_000,
+    retryAttempts: 0,
+    circuitBreaker: false, // a new lock per call: skip the health-check PING
+  });
+  const deadline = Date.now() + 10_000;
+
+  for (;;) {
+    const cached = await redis.get(`cache:${key}`);
+    if (cached !== null) return cached;
+
+    try {
+      return await lock.using(async () => {
+        // The previous holder may have just stored the value
+        const fresh = await redis.get(`cache:${key}`);
+        if (fresh !== null) return fresh;
+        const value = await compute();
+        await redis.set(`cache:${key}`, value, 'EX', 60);
+        return value;
+      });
+    } catch (error) {
+      if (!(error instanceof LockAcquisitionError)) throw error;
+    }
+
+    // Another caller is computing the value: wait, then check the cache again
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${key}`);
+    await sleep(100);
+  }
+}
+```
+
+**Q: Should I create one lock instance, or one per call?**
+Either works. The lock lives in Redis under its key, and every `acquire()` generates a new lock value. With the circuit breaker on (the default), each instance health-checks the server with a `PING` before its first `acquire()` and counts failures on its own. If you create an instance per call, for example per request, pass `circuitBreaker: false` so that each call sends only the lock commands. `LockManager.acquireLock()` creates a new instance on every call.
+
+**Q: Why does `instanceof LockAcquisitionError` return `false`?**
+The package ships separate ESM and CommonJS builds, and each build has its own error classes. When both builds are loaded in one process, for example ESM application code next to a CommonJS dependency that also uses redlock-universal, an error from one build is not an instance of the other build's class. Compare the name (or `code`) instead:
+
+```typescript
+if (error instanceof Error && error.name === 'LockAcquisitionError') {
+  // error.code is 'LOCK_ACQUISITION_FAILED'
+}
+```
 
 **Q: What happens if Redis restarts?**
-Lua scripts auto-reload on NOSCRIPT errors. No action needed.
+If the server lost its script cache, the adapter resends the script with `EVAL`. A restart without persistence also drops the locks, and another client can acquire them while the old holder is still running; see [SAFETY.md](SAFETY.md).
 
-**Q: Performance overhead of auto-extension?**
-Minimal (<1ms). Uses atomic Lua scripts.
+**Q: How much does auto-extension cost?**
+One script call per extension (one per server with RedLock), when about 80% of the TTL has passed.
 
 ## Best Practices
 
-- **Use `using()` over manual acquire/release** - guarantees cleanup, handles auto-extension
-- **Set appropriate TTL** - long enough for work, short enough for quick recovery
-- **Handle `signal.aborted`** - gracefully exit when lock is lost during long operations
+- **Use `using()` over manual acquire/release** - extends the lock while the callback runs and releases it afterwards, also when the callback throws
+- **Set appropriate TTL** - long enough for the work plus possible pauses, short enough for quick recovery, and well above the 5-second command timeout
+- **Handle `signal.aborted`** - stop long operations when the lock is lost; `signal.error` says why
 - **Use unique lock keys** - namespace by resource type (e.g., `user:123:cart`)
-- **Monitor lock metrics** - track acquisition failures and extension patterns
+- **Protect the data, not only the lock** - if two holders would corrupt data, add a version check or a conditional write ([SAFETY.md](SAFETY.md))
+- **Monitor lock statistics** - `LockManager.getStats()` reports acquisitions, failures and hold times
 
 ## Testing
 
 ```bash
 npm test                    # Unit tests
-npm run test:integration    # Integration tests (requires Redis)
-npm run test:coverage       # Coverage report
-npm run test:docker         # Docker-based tests (all services)
+npm run test:integration    # Integration and end-to-end tests (Redis on localhost:6379)
+npm run test:coverage       # All tests with a coverage report (Redis on localhost:6379)
+npm run test:docker         # Starts Redis and Valkey containers, then runs the suites
 ```
 
 ## Troubleshooting
 
 > [!WARNING]
-> **Lock not releasing?** Ensure handle matches stored value. Check if TTL expired before release.
+> **Lock not releasing?** `release()` returns `false` when the lock already expired or another client holds it. Release with the handle that `acquire()` returned.
 
 > [!WARNING]
-> **High P99 latency?** Check Redis server load. Consider `performance: 'lean'` mode.
+> **High P99 latency?** Check Redis server load and network latency. Reuse lock instances: each new instance sends a health-check `PING` before its first `acquire()`, unless you pass `circuitBreaker: false`.
 
 ## Migration
 
@@ -522,25 +636,37 @@ await redlock.release(handle);
 // Before (redis-semaphore)
 const mutex = new Mutex(ioredis, 'resource');
 await mutex.acquire();
-await mutex.release();
+try {
+  await doWork();
+} finally {
+  await mutex.release();
+}
 
 // After (redlock-universal)
 const lock = createLock({
   adapter: new IoredisAdapter(ioredis),
-  key: 'resource',
+  key: 'mutex:resource', // redis-semaphore stores a Mutex under "mutex:<key>"
+  ttl: 10000,            // redis-semaphore's default lockTimeout
+  retryAttempts: 1000,   // with retryDelay 10: waits about 10 s, like its default acquireTimeout
+  retryDelay: 10,
 });
-const handle = await lock.acquire();
-await lock.release(handle);
+// Extends at 80% of the TTL, like the Mutex's default refreshInterval
+await lock.using(async () => {
+  await doWork();
+});
 ```
+
+With the `mutex:` prefix, both libraries use the same Redis key, so they exclude each other while you migrate.
 
 </details>
 
 ## Links
 
-- [Examples](./examples/)
+- [Safety Guide](./SAFETY.md)
+- [Examples](https://github.com/alexpota/redlock-universal/tree/main/examples)
 - [Valkey Setup Guide](./VALKEY.md)
 - [Redis Cluster Examples](./examples/redis-cluster-usage.ts)
-- [Changelog](./CHANGELOG.md)
+- [Release Notes](https://github.com/alexpota/redlock-universal/releases)
 - [Issue Tracker](https://github.com/alexpota/redlock-universal/issues)
 - [Discussions](https://github.com/alexpota/redlock-universal/discussions)
 
