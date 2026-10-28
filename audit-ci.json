@@ -4,6 +4,9 @@
   "allowlist": [
     "GHSA-4qv8-2p9j-2685",
     "GHSA-rxp7-6hxx-x8q5",
-    "GHSA-xjj6-f33q-929c"
+    "GHSA-xjj6-f33q-929c",
+    "GHSA-2m5v-pch6-74hx|undici",
+    "GHSA-9fm3-97px-rjf6|undici",
+    "GHSA-qrxm-fqhp-jwvm|undici"
   ]
 }
