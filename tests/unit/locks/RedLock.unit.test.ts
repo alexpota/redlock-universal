@@ -3,7 +3,7 @@ import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
 import { LockManager } from '../../../src/manager/LockManager.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
-import type { RedLockConfig } from '../../../src/types/locks.js';
+import type { LockHandle, RedLockConfig } from '../../../src/types/locks.js';
 import {
   generateTestKey,
   TEST_STRINGS,
@@ -798,5 +798,94 @@ describe('RedLock minority quorum warning', () => {
     manager.createRedLock(generateTestKey('quorum'), { quorum: 1 });
 
     expect(emitWarning).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RedLock with a node that never answers', () => {
+  /** Far below the 5 s command timeout: the outcome must not wait for the hung node */
+  const PROMPT_MS = 100;
+  const never = <T>(): Promise<T> => new Promise<T>(() => {});
+
+  const node = (setNX: () => Promise<string | null>, extend: () => Promise<boolean>) =>
+    ({
+      setNX: vi.fn(setNX),
+      extendIfMatch: vi.fn(extend),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+    }) as unknown as RedisAdapter;
+  const hung = () => node(never, never);
+  const within = <T>(promise: Promise<T>): Promise<T | 'still waiting'> =>
+    Promise.race([
+      promise,
+      new Promise<'still waiting'>(resolve =>
+        setTimeout(() => resolve('still waiting'), PROMPT_MS)
+      ),
+    ]);
+  const KEY = 'hung-node';
+  const redlock = (adapters: RedisAdapter[]) =>
+    new RedLock({ adapters, key: KEY, ttl: 10_000, retryAttempts: 0 });
+  const heldHandle = (): LockHandle => ({
+    id: 'held',
+    key: KEY,
+    value: 'held-value',
+    acquiredAt: Date.now(),
+    ttl: 10_000,
+  });
+
+  it('should acquire as soon as a quorum has granted', async () => {
+    const granting = () =>
+      node(
+        async () => 'OK',
+        async () => true
+      );
+    const lock = redlock([granting(), granting(), hung()]);
+
+    const handle = await within(lock.acquire());
+
+    expect(handle).not.toBe('still waiting');
+    expect((handle as LockHandle).metadata?.nodes).toEqual(['node-0', 'node-1']);
+  });
+
+  it('should fail as soon as the quorum is out of reach, and release a slow node once it times out', async () => {
+    const refusing = () =>
+      node(
+        async () => null,
+        async () => false
+      );
+    // The adapter's command timeout turns a hung node into an error, later than the decision
+    const timingOut = node(
+      () =>
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2 * PROMPT_MS)),
+      never
+    );
+    const lock = redlock([refusing(), refusing(), timingOut]);
+
+    const outcome = await within(lock.acquire().catch((error: unknown) => error));
+    expect(outcome).toBeInstanceOf(LockAcquisitionError);
+    expect(timingOut.delIfMatch).not.toHaveBeenCalled();
+
+    await new Promise(resolve => setTimeout(resolve, 3 * PROMPT_MS));
+    expect(timingOut.delIfMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should extend as soon as a quorum has extended', async () => {
+    const granting = () =>
+      node(
+        async () => 'OK',
+        async () => true
+      );
+    const lock = redlock([granting(), granting(), hung()]);
+
+    await expect(within(lock.extend(heldHandle(), 10_000))).resolves.toBe(true);
+  });
+
+  it('should report a failed extension as soon as the quorum is out of reach', async () => {
+    const refusing = () =>
+      node(
+        async () => 'OK',
+        async () => false
+      );
+    const lock = redlock([refusing(), refusing(), hung()]);
+
+    await expect(within(lock.extend(heldHandle(), 10_000))).resolves.toBe(false);
   });
 });
