@@ -284,7 +284,7 @@ export class SimpleLock implements Lock {
           }
 
           lastError = late;
-        } else if (!lastError) {
+        } else {
           lastError = new Error(`Lock "${this.key}" is already held`);
         }
       } catch (error) {
