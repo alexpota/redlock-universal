@@ -454,6 +454,52 @@ describe('SimpleLock Unit Tests', () => {
       await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
       expect(healthLock.getHealth().healthy).toBe(true);
     });
+
+    it('should still validate the deprecated healthCheckInterval option', () => {
+      const create = (healthCheckInterval: number): SimpleLock =>
+        new SimpleLock({
+          adapter: mockAdapter,
+          key: 'test-lock',
+          circuitBreaker: { healthCheckInterval },
+        });
+
+      expect(() => create(0)).toThrow(
+        'Circuit breaker healthCheckInterval must be a positive integer'
+      );
+      expect(() => create(1.5)).toThrow(
+        'Circuit breaker healthCheckInterval must be a positive integer'
+      );
+      expect(() => create(30_000)).not.toThrow();
+    });
+
+    it('should log once when health is lost and once when it comes back', async () => {
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const healthLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+        logger,
+      });
+
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis down'));
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+      await healthLock.acquire();
+
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Redis health check failed',
+        expect.any(Error),
+        expect.objectContaining({ key: 'test-lock', healthStatus: 'failed' })
+      );
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        'Redis connection recovered',
+        expect.objectContaining({ key: 'test-lock', healthStatus: 'recovered' })
+      );
+    });
   });
 
   describe('circuit breaker', () => {

@@ -396,3 +396,27 @@ describe('LockManager lock tracking', () => {
     expect(stats.averageHoldTime).toBeGreaterThanOrEqual(HOLD_MS - 1);
   });
 });
+
+describe('LockManager batch logging', () => {
+  it('should log a debug line when a batch attempt finds a key held and will retry', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    let attempt = 0;
+    const node = {
+      batchSetNX: vi.fn(async (keys: string[]) =>
+        attempt++ === 0
+          ? { success: false, acquiredCount: 0, failedKey: keys[0], failedIndex: 1 }
+          : { success: true, acquiredCount: keys.length }
+      ),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+      isConnected: vi.fn().mockReturnValue(true),
+    } as unknown as RedisAdapter;
+    const manager = new LockManager({ nodes: [node], logger });
+
+    await manager.acquireBatch(['a', 'b'], { retryAttempts: 1, retryDelay: 0 });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Batch lock acquisition attempt failed, retrying',
+      expect.objectContaining({ attempt: 1, maxAttempts: 2, failedKey: 'a', failedIndex: 1 })
+    );
+  });
+});
