@@ -418,7 +418,7 @@ const lock = createLock({ adapter, key: 'resource', performance: 'lean' });
 const lock = createLock({ adapter, key: 'resource', performance: 'enterprise' });
 ```
 
-`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). It does not validate its configuration or check handles, and it builds lock values from a timestamp, `Math.random()` and the process ID instead of `crypto`.
+`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). It does not validate its configuration or check handles.
 
 </details>
 
@@ -602,7 +602,7 @@ npm run test:docker         # Starts Redis and Valkey containers, then runs the 
 > **Lock not releasing?** `release()` returns `false` when the lock already expired or another client holds it. Release with the handle that `acquire()` returned.
 
 > [!WARNING]
-> **High P99 latency?** Check Redis server load and network latency. Reuse lock instances: each new instance sends a health-check `PING` before its first `acquire()`, unless you pass `circuitBreaker: false`.
+> **High P99 latency?** Check Redis server load and network latency.
 
 ## Migration
 
