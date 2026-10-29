@@ -5,6 +5,7 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
+import { generateLockValue } from '../utils/crypto.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -27,7 +28,7 @@ LOCK_HELD_ERROR.stack = '';
  * - Pre-allocated error objects (saves stack trace overhead)
  * - Minimal property storage with short names
  * - No closures or callbacks
- * - Inline value generation
+ * - Pooled-buffer lock values from crypto
  */
 export class LeanSimpleLock implements Lock {
   private readonly a: RedisAdapter;
@@ -49,7 +50,7 @@ export class LeanSimpleLock implements Lock {
     let lastError: Error | null = null;
     let attempts = 0;
 
-    const value = `${startTime}-${Math.random().toString(36).slice(2)}-${process.pid}`;
+    const value = generateLockValue();
 
     for (let attempt = 0; attempt <= this.r; attempt++) {
       attempts++;
