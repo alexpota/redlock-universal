@@ -572,9 +572,8 @@ describe('SimpleLock Unit Tests', () => {
         // Advance past the default 60000ms resetTimeout
         vi.advanceTimersByTime(60001);
 
-        // Set up mocks for successful probe
+        // Set up a successful probe
         mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
-        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
 
         const handle = await cbLock.acquire();
 
@@ -607,9 +606,8 @@ describe('SimpleLock Unit Tests', () => {
         // Advance past resetTimeout
         vi.advanceTimersByTime(60001);
 
-        // Keep setNX and ping rejecting
+        // Keep setNX rejecting
         mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis still down'));
-        mockAdapter.ping = vi.fn().mockRejectedValue(new Error('Redis still down'));
 
         // Should throw LockAcquisitionError (the actual Redis error, not circuit breaker message)
         await expect(cbLock.acquire()).rejects.toThrow(LockAcquisitionError);
@@ -716,7 +714,6 @@ describe('SimpleLock Unit Tests', () => {
         vi.advanceTimersByTime(2001);
 
         mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
-        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
 
         const handle = await customLock.acquire();
 

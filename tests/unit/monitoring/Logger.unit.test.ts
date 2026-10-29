@@ -148,6 +148,7 @@ describe('Logger', () => {
       const createAdapter = (): RedisAdapter =>
         ({
           setNX: vi.fn().mockRejectedValue(new Error('Redis down')),
+          delIfMatch: vi.fn().mockResolvedValue(false),
         }) as unknown as RedisAdapter;
       const acquireFailing = (key: string): Promise<unknown> =>
         new SimpleLock({ adapter: createAdapter(), key, logger, retryAttempts: 0 })

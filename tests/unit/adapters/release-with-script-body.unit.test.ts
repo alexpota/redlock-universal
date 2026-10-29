@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { IoredisAdapter } from '../../../src/adapters/IoredisAdapter.js';
 import { NodeRedisAdapter } from '../../../src/adapters/NodeRedisAdapter.js';
 import { GlideAdapter } from '../../../src/adapters/GlideAdapter.js';
-import { DELETE_IF_MATCH_SCRIPT } from '../../../src/adapters/BaseAdapter.js';
+import { BaseAdapter, DELETE_IF_MATCH_SCRIPT } from '../../../src/adapters/BaseAdapter.js';
 import {
   RELEASE_WITH_SCRIPT_BODY,
   type ReleaseWithScriptBody,
@@ -57,5 +57,15 @@ describe('release that sends the script body', () => {
       'value',
     ]);
     expect(client.customCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to delIfMatch for a custom adapter without script calls', async () => {
+    const custom = Object.assign(Object.create(BaseAdapter.prototype) as BaseAdapter, {
+      delIfMatch: vi.fn().mockResolvedValue(true),
+    });
+
+    await expect(release(custom)('lock', 'value')).resolves.toBe(true);
+
+    expect(custom.delIfMatch).toHaveBeenCalledWith('lock', 'value');
   });
 });

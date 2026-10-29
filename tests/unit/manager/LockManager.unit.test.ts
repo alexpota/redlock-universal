@@ -358,7 +358,7 @@ describe('LockManager lock tracking', () => {
     }) as unknown as RedisAdapter;
 
   it('should not count a handle that is released twice', async () => {
-    const manager = new LockManager({ nodes: [new MockRedisAdapter()] });
+    const manager = new LockManager({ nodes: [new MockRedisAdapter() as unknown as RedisAdapter] });
     const handle = await manager.acquireLock('tracked');
 
     await manager.releaseLock(handle);
@@ -368,7 +368,7 @@ describe('LockManager lock tracking', () => {
   });
 
   it('should record hold time only for handles it tracks', async () => {
-    const manager = new LockManager({ nodes: [new MockRedisAdapter()] });
+    const manager = new LockManager({ nodes: [new MockRedisAdapter() as unknown as RedisAdapter] });
     const untracked: LockHandle = {
       id: 'untracked',
       key: 'other',
