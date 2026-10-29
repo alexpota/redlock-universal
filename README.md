@@ -14,7 +14,7 @@ Distributed locks for Node.js on the Redis or Valkey you already run, with the c
 
 **node-redis** &bull; **ioredis** &bull; **Valkey GLIDE**
 
-Requires Node.js 22 or later. CI runs the test suite with node-redis and ioredis against Redis 7 and Valkey 8, the Valkey GLIDE adapter tests against Valkey 8, and the cluster tests with all three clients against Redis 7 and Valkey 8 clusters.
+Requires Node.js 22 or later. CI runs the test suite on Node.js 22, 24 and 26 with node-redis and ioredis against Redis 7 and 8 and Valkey 8 and 9, the Valkey GLIDE adapter tests against Valkey 8 and 9, and the cluster tests with all three clients against Redis 7 and 8 and Valkey 8 and 9 clusters.
 
 > <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
 
@@ -183,7 +183,7 @@ Redlock keeps working while a minority of the servers is down. It is not a conse
 
 ## Adapters & Cluster Support
 
-Works with the Redis Cluster clients of ioredis, node-redis and Valkey GLIDE. CI runs the cluster tests, covering the lock commands and script reloading, on three-primary Redis 7 and Valkey 8 clusters.
+Works with the Redis Cluster clients of ioredis, node-redis and Valkey GLIDE. CI runs the cluster tests, covering the lock commands and script reloading, on three-primary Redis 7 and 8 and Valkey 8 and 9 clusters.
 
 ```typescript
 // ioredis

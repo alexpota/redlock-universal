@@ -4,20 +4,21 @@
 7.2.4 in 2024. It is a Linux Foundation project.
 
 redlock-universal works with Valkey through node-redis, ioredis or Valkey GLIDE.
-CI runs the integration and end-to-end tests against Valkey 8 as well as Redis 7.
+CI runs the integration and end-to-end tests against Valkey 8 and 9 as well as
+Redis 7 and 8.
 
 ## Compatibility Matrix
 
-| Client Library | Redis 7 | Valkey 8 | Versions tested in CI                           |
-| -------------- | ------- | -------- | ----------------------------------------------- |
-| node-redis     | Yes     | Yes      | 4.7.1; 5.12.1 and 6.3.0 in the cluster workflow |
-| ioredis        | Yes     | Yes      | 5.11.1; 6.0.0 in the cluster workflow           |
-| Valkey GLIDE   | Yes     | Yes      | 2.4.2; 2.5.3 in the cluster workflow            |
+| Client Library | Redis 7 and 8 | Valkey 8 and 9 | Versions tested in CI                           |
+| -------------- | ------------- | -------------- | ----------------------------------------------- |
+| node-redis     | Yes           | Yes            | 4.7.1; 5.12.1 and 6.3.0 in the cluster workflow |
+| ioredis        | Yes           | Yes            | 5.11.1; 6.0.0 in the cluster workflow           |
+| Valkey GLIDE   | Yes           | Yes            | 2.4.2; 2.5.3 in the cluster workflow            |
 
-CI runs the `redis:7-alpine` and `valkey/valkey:8-alpine` images, standalone
-and as a three-primary cluster. Other server versions are not tested. The full
-GLIDE adapter suite runs against Valkey; against Redis, CI runs the GLIDE script
-and cluster tests.
+CI runs the `redis:7-alpine`, `redis:8-alpine`, `valkey/valkey:8-alpine` and
+`valkey/valkey:9-alpine` images, standalone and as a three-primary cluster.
+Other server versions are not tested. The full GLIDE adapter suite runs against
+Valkey; against Redis, CI runs the GLIDE script and cluster tests.
 
 ## Using Valkey GLIDE
 
@@ -150,7 +151,7 @@ const lock = createLock({
 
 ```bash
 # Start Valkey container
-docker run -d --name valkey -p 127.0.0.1:6379:6379 valkey/valkey:8-alpine
+docker run -d --name valkey -p 127.0.0.1:6379:6379 valkey/valkey:9-alpine
 
 # Verify it's running
 docker exec valkey valkey-cli PING
@@ -161,7 +162,7 @@ docker exec valkey valkey-cli PING
 ```yaml
 services:
   valkey:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '127.0.0.1:6379:6379'
     volumes:
@@ -182,17 +183,17 @@ volumes:
 ```yaml
 services:
   valkey1:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '127.0.0.1:6379:6379'
 
   valkey2:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '127.0.0.1:6380:6379'
 
   valkey3:
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     ports:
       - '127.0.0.1:6381:6379'
 ```
