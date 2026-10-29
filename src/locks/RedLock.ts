@@ -10,7 +10,7 @@ import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../t
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { emitWarningOnce } from '../utils/warnings.js';
-import { clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -156,8 +156,8 @@ export class RedLock implements Lock {
             `RedLock quorum not achieved: ${result.successCount}/${this.config.quorum} required`
           );
 
-        // Release any partial locks acquired
-        await this.releasePartialLocks(result.nodeResults, lockValue);
+        // Release what this attempt may have set, without waiting for slow nodes
+        this.releasePartialLocks(result.nodeResults, lockValue);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR);
       }
@@ -276,21 +276,15 @@ export class RedLock implements Lock {
   }
 
   /**
-   * Release any partially acquired locks to prevent deadlocks
+   * Release this attempt's value on every node that set it or may have set it (the
+   * command failed or timed out), without waiting. Nodes that answered "not set" are skipped
    */
-  private async releasePartialLocks(
-    nodeResults: NodeLockResult[],
-    lockValue: string
-  ): Promise<void> {
-    const releasePromises = nodeResults
-      .filter(result => result.success)
-      .map(result =>
-        result.adapter.delIfMatch(this.config.key, lockValue).catch(() => {
-          // Ignore release errors for partial cleanup
-        })
-      );
-
-    await Promise.allSettled(releasePromises);
+  private releasePartialLocks(nodeResults: NodeLockResult[], lockValue: string): void {
+    for (const result of nodeResults) {
+      if (result.success || result.error) {
+        releaseQuietly(result.adapter, this.config.key, lockValue);
+      }
+    }
   }
 
   /**

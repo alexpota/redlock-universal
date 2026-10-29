@@ -279,7 +279,6 @@ export class LockManager {
     const startTime = Date.now();
     const drift = clockDriftFor(ttl);
     const sortedKeys = [...keys].sort();
-    const values = sortedKeys.map(() => generateLockValue());
 
     this.stats.totalLocks += sortedKeys.length;
 
@@ -299,6 +298,8 @@ export class LockManager {
     let lastFailedIndex: number | undefined;
 
     for (let attempt = 0; attempt <= retryAttempts; attempt++) {
+      const values = sortedKeys.map(() => generateLockValue());
+
       try {
         // The server starts the TTLs when it runs the script, so the locks are valid from here
         const sentAt = Date.now();
@@ -370,6 +371,8 @@ export class LockManager {
       } catch (error) {
         // Unexpected error (network, Redis, etc.)
         lastError = error as Error;
+        // The script may still have run: release this attempt's values without waiting
+        sortedKeys.forEach((key, index) => releaseQuietly(adapter, key, values[index]!));
         lastFailedKey = sortedKeys[0];
         lastFailedIndex = 0;
 

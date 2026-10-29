@@ -251,9 +251,10 @@ export class SimpleLock implements Lock {
     const startTime = Date.now();
     const drift = clockDriftFor(this.ttl);
     let lastError: Error | null = null;
-    const lockValue = generateLockValue();
 
     for (let attempt = 0; attempt <= this.retryAttempts; attempt++) {
+      const lockValue = generateLockValue();
+
       try {
         // The server starts the TTL when it runs the SET, so the lock is valid from here
         const sentAt = Date.now();
@@ -295,6 +296,8 @@ export class SimpleLock implements Lock {
         }
       } catch (error) {
         lastError = error as Error;
+        // The SET may still have run: release this attempt's value without waiting
+        releaseQuietly(this.adapter, this.key, lockValue);
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(false);

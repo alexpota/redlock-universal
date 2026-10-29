@@ -52,10 +52,9 @@ export class LeanSimpleLock implements Lock {
     let lastError: Error | null = null;
     let attempts = 0;
 
-    const value = generateLockValue();
-
     for (let attempt = 0; attempt <= this.r; attempt++) {
       attempts++;
+      const value = generateLockValue();
       try {
         // The server starts the TTL when it runs the SET, so the lock is valid from here
         const sentAt = Date.now();
@@ -89,6 +88,8 @@ export class LeanSimpleLock implements Lock {
         }
       } catch (error) {
         lastError = error instanceof Error ? error : LOCK_HELD_ERROR;
+        // The SET may still have run: release this attempt's value without waiting
+        releaseQuietly(this.a, this.k, value);
       }
 
       if (attempt < this.r) {
