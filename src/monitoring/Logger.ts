@@ -52,13 +52,6 @@ export interface LoggerConfig {
 export class Logger implements ILogger {
   private readonly config: Required<LoggerConfig>;
   private readonly entries: LogEntry[] = [];
-  private _reusableEntry: {
-    level?: LogLevel;
-    message?: string;
-    timestamp?: number;
-    context?: Record<string, unknown>;
-    error?: Error;
-  } = {};
 
   constructor(config: Partial<LoggerConfig> = {}) {
     this.config = {
@@ -158,19 +151,9 @@ export class Logger implements ILogger {
 
     const timestamp = Date.now();
 
-    // Console output (uses reusable entry to avoid allocation)
+    // Console output (fields are passed through, so no entry object is built or shared)
     if (this.config.enableConsole) {
-      this._reusableEntry.level = level;
-      this._reusableEntry.message = message;
-      this._reusableEntry.timestamp = timestamp;
-      if (context !== undefined) {
-        this._reusableEntry.context = context;
-      }
-      if (error !== undefined) {
-        this._reusableEntry.error = error;
-      }
-
-      this.writeToConsole(this._reusableEntry as LogEntry);
+      this.writeToConsole(level, message, timestamp, context, error);
     }
 
     // Collection (create new entry only if needed)
@@ -192,18 +175,24 @@ export class Logger implements ILogger {
     }
   }
 
-  private writeToConsole(entry: LogEntry): void {
-    const timestamp = new Date(entry.timestamp).toISOString();
-    const levelName = LogLevel[entry.level];
-    const prefix = `[${timestamp}] ${this.config.prefix} ${levelName}:`;
+  private writeToConsole(
+    level: LogLevel,
+    message: string,
+    timestamp: number,
+    context?: Record<string, unknown>,
+    error?: Error
+  ): void {
+    const isoTime = new Date(timestamp).toISOString();
+    const levelName = LogLevel[level];
+    const prefix = `[${isoTime}] ${this.config.prefix} ${levelName}:`;
 
-    let output = `${prefix} ${entry.message}`;
+    let output = `${prefix} ${message}`;
 
-    if (entry.context && Object.keys(entry.context).length > 0) {
-      output += ` ${JSON.stringify(entry.context)}`;
+    if (context && Object.keys(context).length > 0) {
+      output += ` ${JSON.stringify(context)}`;
     }
 
-    switch (entry.level) {
+    switch (level) {
       case LogLevel.DEBUG:
         console.debug(output);
         break;
@@ -212,14 +201,14 @@ export class Logger implements ILogger {
         break;
       case LogLevel.WARN:
         console.warn(output);
-        if (entry.error) {
-          console.warn(entry.error);
+        if (error) {
+          console.warn(error);
         }
         break;
       case LogLevel.ERROR:
         console.error(output);
-        if (entry.error) {
-          console.error(entry.error);
+        if (error) {
+          console.error(error);
         }
         break;
     }
