@@ -1,19 +1,26 @@
-import { randomFillSync, timingSafeEqual } from 'crypto';
+import { randomFillSync, randomUUID, timingSafeEqual } from 'crypto';
 
 /**
- * Buffer pool for crypto operations to reduce allocations
- * Reuses pre-allocated buffers with fresh random data on each call
+ * Dash positions in a UUID string: 32 hex characters in groups of 8-4-4-4-12
  */
-const LOCK_VALUE_BUFFER = Buffer.allocUnsafe(16);
-const LOCK_ID_BUFFER = Buffer.allocUnsafe(6);
+const UUID_DASH_1 = 8;
+const UUID_DASH_2 = 13;
+const UUID_DASH_3 = 18;
+const UUID_DASH_4 = 23;
 
 /**
- * Generate a cryptographically secure random lock value
- * Uses buffer pool with randomFillSync for zero-allocation crypto
+ * Generate a cryptographically secure random lock value: 32 hex characters (122 random bits)
+ * from crypto.randomUUID, which draws on a pre-generated pool of random bytes
  */
 export function generateLockValue(): string {
-  randomFillSync(LOCK_VALUE_BUFFER);
-  return LOCK_VALUE_BUFFER.toString('hex');
+  const uuid = randomUUID();
+  return (
+    uuid.slice(0, UUID_DASH_1) +
+    uuid.slice(UUID_DASH_1 + 1, UUID_DASH_2) +
+    uuid.slice(UUID_DASH_2 + 1, UUID_DASH_3) +
+    uuid.slice(UUID_DASH_3 + 1, UUID_DASH_4) +
+    uuid.slice(UUID_DASH_4 + 1)
+  );
 }
 
 /**
@@ -21,10 +28,8 @@ export function generateLockValue(): string {
  * Format: timestamp-random (e.g., "1703123456789-a1b2c3d4e5f6")
  */
 export function generateLockId(): string {
-  const timestamp = Date.now();
-  randomFillSync(LOCK_ID_BUFFER);
-  const random = LOCK_ID_BUFFER.toString('hex');
-  return `${timestamp}-${random}`;
+  // The last UUID group is 12 random hex characters
+  return `${Date.now()}-${randomUUID().slice(UUID_DASH_4 + 1)}`;
 }
 
 /**
