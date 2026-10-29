@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { releaseQuietly } from '../../../src/utils/validity.js';
+import { releaseQuietly } from '../../../src/utils/release-quietly.js';
 import { RELEASE_WITH_SCRIPT_BODY } from '../../../src/adapters/script-execution.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
 
@@ -48,6 +48,48 @@ describe('releaseQuietly', () => {
       expect(() => releaseQuietly(throwing, 'lock', 'value')).not.toThrow();
       await settle();
 
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('should log a release that fails at debug level when a logger is given', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const adapter = {
+      delIfMatch: vi.fn().mockRejectedValue(new Error('Operation timed out after 5000ms')),
+    } as unknown as RedisAdapter;
+
+    releaseQuietly(adapter, 'lock', 'secret-value', logger);
+    await settle();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Release after a failed lock attempt did not complete',
+      { key: 'lock', error: 'Operation timed out after 5000ms' }
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain('secret-value');
+  });
+
+  it('should not surface an error thrown by the logger', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const logger = {
+        debug: vi.fn(() => {
+          throw new Error('logger broke');
+        }),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      const adapter = {
+        delIfMatch: vi.fn().mockRejectedValue(new Error('down')),
+      } as unknown as RedisAdapter;
+
+      releaseQuietly(adapter, 'lock', 'value', logger);
+      await settle();
+
+      expect(logger.debug).toHaveBeenCalledTimes(1);
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       process.off('unhandledRejection', unhandled);

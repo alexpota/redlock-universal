@@ -3,12 +3,8 @@ import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import {
-  assertTtlAboveDrift,
-  clockDriftFor,
-  releaseQuietly,
-  validityExceededError,
-} from '../utils/validity.js';
+import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -283,7 +279,7 @@ export class SimpleLock implements Lock {
 
         if (result === REDIS_OK_RESPONSE) {
           // Granted too late to be safe: give the key back and try again
-          releaseQuietly(this.adapter, this.key, lockValue);
+          releaseQuietly(this.adapter, this.key, lockValue, this.logger);
           lastError = validityExceededError(elapsed, drift, this.ttl);
         } else if (!lastError) {
           lastError = new Error(`Lock "${this.key}" is already held`);
@@ -291,7 +287,7 @@ export class SimpleLock implements Lock {
       } catch (error) {
         lastError = error as Error;
         // The SET may still have run: release this attempt's value without waiting
-        releaseQuietly(this.adapter, this.key, lockValue);
+        releaseQuietly(this.adapter, this.key, lockValue, this.logger);
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(false);

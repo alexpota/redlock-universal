@@ -10,12 +10,8 @@ import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../t
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { emitWarningOnce } from '../utils/warnings.js';
-import {
-  assertTtlAboveDrift,
-  clockDriftFor,
-  releaseQuietly,
-  validityExceededError,
-} from '../utils/validity.js';
+import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -324,7 +320,7 @@ export class RedLock implements Lock {
   ): void {
     nodeResults.forEach((result, index) => {
       if (!result || result.success || result.error) {
-        releaseQuietly(this.adapters[index]!, this.config.key, lockValue);
+        releaseQuietly(this.adapters[index]!, this.config.key, lockValue, this.config.logger);
       }
     });
   }

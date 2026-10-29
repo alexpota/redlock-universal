@@ -6,12 +6,8 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue } from '../utils/crypto.js';
-import {
-  assertTtlAboveDrift,
-  clockDriftFor,
-  releaseQuietly,
-  validityExceededError,
-} from '../utils/validity.js';
+import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,

@@ -5,12 +5,8 @@ import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import {
-  assertTtlAboveDrift,
-  clockDriftFor,
-  releaseQuietly,
-  validityExceededError,
-} from '../utils/validity.js';
+import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
@@ -349,7 +345,9 @@ export class LockManager {
 
         if (result.success) {
           // Granted too late to be safe: give the keys back and try again
-          sortedKeys.forEach((key, index) => releaseQuietly(adapter, key, values[index]!));
+          sortedKeys.forEach((key, index) =>
+            releaseQuietly(adapter, key, values[index]!, this.config.logger)
+          );
           lastError = validityExceededError(elapsed, drift, ttl);
           lastFailedKey = sortedKeys[0];
           lastFailedIndex = 0;
@@ -375,7 +373,9 @@ export class LockManager {
         // Unexpected error (network, Redis, etc.)
         lastError = error as Error;
         // The script may still have run: release this attempt's values without waiting
-        sortedKeys.forEach((key, index) => releaseQuietly(adapter, key, values[index]!));
+        sortedKeys.forEach((key, index) =>
+          releaseQuietly(adapter, key, values[index]!, this.config.logger)
+        );
         lastFailedKey = sortedKeys[0];
         lastFailedIndex = 0;
 
