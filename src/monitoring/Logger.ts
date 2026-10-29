@@ -201,9 +201,6 @@ export class Logger implements ILogger {
         break;
       case LogLevel.WARN:
         console.warn(output);
-        if (error) {
-          console.warn(error);
-        }
         break;
       case LogLevel.ERROR:
         console.error(output);
