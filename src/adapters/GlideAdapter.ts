@@ -14,7 +14,7 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-import { executeScript, RELEASE_WITH_SCRIPT_BODY, type ScriptCalls } from './script-execution.js';
+import type { ScriptCalls } from './script-execution.js';
 
 // GLIDE-specific option constants
 const GLIDE_CONDITIONAL_SET_NX = 'onlyIfDoesNotExist' as const;
@@ -80,25 +80,11 @@ export class GlideAdapter extends BaseAdapter {
     return String(value);
   }
 
-  /**
-   * Execute a Lua script by SHA, sending the script itself when the node does not have it
-   * @private
-   */
-  private async _executeScript<T>(
-    scriptCacheKey: string,
+  protected override scriptCalls(
     scriptBody: string,
     keys: string[],
     args: (string | number)[]
-  ): Promise<T> {
-    return executeScript<T>(
-      this.scriptSHAs,
-      scriptCacheKey,
-      scriptBody,
-      this.scriptCalls(scriptBody, keys, args)
-    );
-  }
-
-  private scriptCalls(scriptBody: string, keys: string[], args: (string | number)[]): ScriptCalls {
+  ): ScriptCalls {
     const scriptArgs = [keys.length.toString(), ...keys, ...args.map(a => a.toString())];
 
     return {
@@ -106,16 +92,6 @@ export class GlideAdapter extends BaseAdapter {
       evalScript: () =>
         this.withTimeout(this.client.customCommand(['EVAL', scriptBody, ...scriptArgs])),
     };
-  }
-
-  /**
-   * Release with EVAL, sending the script itself, so it does not depend on the server's
-   * script cache. Used for best-effort cleanup after an attempt that failed or timed out
-   * @internal
-   */
-  async [RELEASE_WITH_SCRIPT_BODY](key: string, value: string): Promise<boolean> {
-    const calls = this.scriptCalls(DELETE_IF_MATCH_SCRIPT, [this.prefixKey(key)], [value]);
-    return (await calls.evalScript()) === REDIS_SCRIPT_SUCCESS;
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {

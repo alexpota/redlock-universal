@@ -5,7 +5,12 @@ import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
 import { releaseQuietly } from '../utils/release-quietly.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
@@ -300,55 +305,54 @@ export class LockManager {
       const values = sortedKeys.map(() => generateLockValue());
 
       try {
-        // The server starts the TTLs when it runs the script, so the locks are valid from here
-        const sentAt = Date.now();
-        const startedAt = performance.now();
-        const result = await adapter.batchSetNX(sortedKeys, values, ttl);
-        const elapsed = performance.now() - startedAt;
-
-        if (result.success && elapsed + drift < ttl) {
-          const acquisitionTime = Date.now() - startTime;
-
-          const handles: LockHandle[] = sortedKeys.map((key, index) => ({
-            id: generateLockId(),
-            key,
-            value: values[index]!,
-            acquiredAt: sentAt,
-            ttl,
-            metadata: {
-              attempts: attempt + 1,
-              acquisitionTime,
-              nodes: [`${NODE_ID_PREFIX}${nodeIndex}`],
-              strategy: 'simple' as const,
-            },
-          }));
-
-          this.recordAcquisitionTime(acquisitionTime);
-          this.stats.acquiredLocks += handles.length;
-          this.stats.activeLocks += handles.length;
-
-          for (const handle of handles) {
-            this.activeLocks.set(handle.id, handle);
-          }
-
-          if (this.config.logger) {
-            this.config.logger.info('Batch lock acquisition succeeded', {
-              lockCount: handles.length,
-              acquisitionTime,
-              avgTimePerLock: acquisitionTime / handles.length,
-              attempts: attempt + 1,
-            });
-          }
-
-          return handles;
-        }
+        const timed = await sendTimed(() => adapter.batchSetNX(sortedKeys, values, ttl));
+        const result = timed.reply;
 
         if (result.success) {
-          // Granted too late to be safe: give the keys back and try again
-          sortedKeys.forEach((key, index) =>
-            releaseQuietly(adapter, key, values[index]!, this.config.logger)
+          const late = lateGrantError(timed, ttl, drift, () =>
+            sortedKeys.forEach((key, index) =>
+              releaseQuietly(adapter, key, values[index]!, this.config.logger)
+            )
           );
-          lastError = validityExceededError(elapsed, drift, ttl);
+
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
+
+            const handles: LockHandle[] = sortedKeys.map((key, index) => ({
+              id: generateLockId(),
+              key,
+              value: values[index]!,
+              acquiredAt: timed.sentAt,
+              ttl,
+              metadata: {
+                attempts: attempt + 1,
+                acquisitionTime,
+                nodes: [`${NODE_ID_PREFIX}${nodeIndex}`],
+                strategy: 'simple' as const,
+              },
+            }));
+
+            this.recordAcquisitionTime(acquisitionTime);
+            this.stats.acquiredLocks += handles.length;
+            this.stats.activeLocks += handles.length;
+
+            for (const handle of handles) {
+              this.activeLocks.set(handle.id, handle);
+            }
+
+            if (this.config.logger) {
+              this.config.logger.info('Batch lock acquisition succeeded', {
+                lockCount: handles.length,
+                acquisitionTime,
+                avgTimePerLock: acquisitionTime / handles.length,
+                attempts: attempt + 1,
+              });
+            }
+
+            return handles;
+          }
+
+          lastError = late;
           lastFailedKey = sortedKeys[0];
           lastFailedIndex = 0;
         } else {

@@ -6,7 +6,12 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue } from '../utils/crypto.js';
-import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
 import { releaseQuietly } from '../utils/release-quietly.js';
 import {
   executeWithSingleLockExtension,
@@ -58,33 +63,31 @@ export class LeanSimpleLock implements Lock {
       attempts++;
       const value = generateLockValue();
       try {
-        // The server starts the TTL when it runs the SET, so the lock is valid from here
-        const sentAt = Date.now();
-        const startedAt = performance.now();
-        const result = await this.a.setNX(this.k, value, this.t);
-        const elapsed = performance.now() - startedAt;
+        const timed = await sendTimed(() => this.a.setNX(this.k, value, this.t));
 
-        if (result === REDIS_OK_RESPONSE && elapsed + drift < this.t) {
-          const acquisitionTime = Date.now() - startTime;
+        if (timed.reply === REDIS_OK_RESPONSE) {
+          const late = lateGrantError(timed, this.t, drift, () =>
+            releaseQuietly(this.a, this.k, value)
+          );
 
-          return {
-            id: value,
-            key: this.k,
-            value,
-            acquiredAt: sentAt,
-            ttl: this.t,
-            metadata: {
-              attempts,
-              acquisitionTime,
-              strategy: 'simple' as const,
-            },
-          };
-        }
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
 
-        if (result === REDIS_OK_RESPONSE) {
-          // Granted too late to be safe: give the key back and try again
-          releaseQuietly(this.a, this.k, value);
-          lastError = validityExceededError(elapsed, drift, this.t);
+            return {
+              id: value,
+              key: this.k,
+              value,
+              acquiredAt: timed.sentAt,
+              ttl: this.t,
+              metadata: {
+                attempts,
+                acquisitionTime,
+                strategy: 'simple' as const,
+              },
+            };
+          }
+
+          lastError = late;
         } else {
           lastError = LOCK_HELD_ERROR;
         }

@@ -35,6 +35,46 @@ export function assertTtlAboveDrift(
 }
 
 /**
+ * Reply to one timed acquisition attempt
+ */
+export interface TimedReply<T> {
+  readonly reply: T;
+  /** When the attempt was sent (Unix epoch ms): the lock's acquiredAt if it is granted in time */
+  readonly sentAt: number;
+  /** Monotonic time from sending the attempt to its reply (ms) */
+  readonly elapsed: number;
+}
+
+/**
+ * Send one acquisition attempt and time it. The server starts the TTL when it runs the
+ * command, so a granted lock is valid from when the attempt was sent
+ */
+export async function sendTimed<T>(send: () => Promise<T>): Promise<TimedReply<T>> {
+  const sentAt = Date.now();
+  const startedAt = performance.now();
+  const reply = await send();
+  return { reply, sentAt, elapsed: performance.now() - startedAt };
+}
+
+/**
+ * Apply the validity rule to a granted attempt. If its elapsed time plus the drift allowance
+ * reaches the TTL, release it without waiting and return the error to report; return
+ * undefined for a grant that is still valid
+ */
+export function lateGrantError(
+  attempt: TimedReply<unknown>,
+  ttl: number,
+  drift: number,
+  release: () => void
+): Error | undefined {
+  if (attempt.elapsed + drift < ttl) {
+    return undefined;
+  }
+  release();
+  return validityExceededError(attempt.elapsed, drift, ttl);
+}
+
+/**
  * Error for a lock granted after its validity time ran out: the time the attempt took
  * plus the drift allowance reached the TTL
  */

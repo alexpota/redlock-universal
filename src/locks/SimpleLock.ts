@@ -3,7 +3,12 @@ import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
 import { releaseQuietly } from '../utils/release-quietly.js';
 import {
   executeWithSingleLockExtension,
@@ -245,42 +250,40 @@ export class SimpleLock implements Lock {
       const lockValue = generateLockValue();
 
       try {
-        // The server starts the TTL when it runs the SET, so the lock is valid from here
-        const sentAt = Date.now();
-        const startedAt = performance.now();
-        const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
-        const elapsed = performance.now() - startedAt;
+        const timed = await sendTimed(() => this.adapter.setNX(this.key, lockValue, this.ttl));
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(true);
           this.recordHealth();
         }
 
-        if (result === REDIS_OK_RESPONSE && elapsed + drift < this.ttl) {
-          const acquisitionTime = Date.now() - startTime;
+        if (timed.reply === REDIS_OK_RESPONSE) {
+          const late = lateGrantError(timed, this.ttl, drift, () =>
+            releaseQuietly(this.adapter, this.key, lockValue, this.logger)
+          );
 
-          const handle: LockHandle = {
-            id: generateLockId(),
-            key: this.key,
-            value: lockValue,
-            acquiredAt: sentAt,
-            ttl: this.ttl,
-            metadata: {
-              attempts: attempt + 1,
-              acquisitionTime,
-              ...this._metadataTemplate,
-            },
-          };
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
 
-          this.onAcquire?.(handle);
+            const handle: LockHandle = {
+              id: generateLockId(),
+              key: this.key,
+              value: lockValue,
+              acquiredAt: timed.sentAt,
+              ttl: this.ttl,
+              metadata: {
+                attempts: attempt + 1,
+                acquisitionTime,
+                ...this._metadataTemplate,
+              },
+            };
 
-          return handle;
-        }
+            this.onAcquire?.(handle);
 
-        if (result === REDIS_OK_RESPONSE) {
-          // Granted too late to be safe: give the key back and try again
-          releaseQuietly(this.adapter, this.key, lockValue, this.logger);
-          lastError = validityExceededError(elapsed, drift, this.ttl);
+            return handle;
+          }
+
+          lastError = late;
         } else if (!lastError) {
           lastError = new Error(`Lock "${this.key}" is already held`);
         }
