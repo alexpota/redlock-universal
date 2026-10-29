@@ -3,7 +3,7 @@ services:
   redis-1:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis-1-data:/data
@@ -19,7 +19,7 @@ services:
   redis-2:
     image: redis:7-alpine
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     command: redis-server --appendonly yes --port 6379
     volumes:
       - redis-2-data:/data
@@ -35,7 +35,7 @@ services:
   redis-3:
     image: redis:7-alpine
     ports:
-      - "6381:6379"
+      - "127.0.0.1:6381:6379"
     command: redis-server --appendonly yes --port 6379
     volumes:
       - redis-3-data:/data
@@ -51,7 +51,7 @@ services:
   redis-4:
     image: redis:7-alpine
     ports:
-      - "6382:6379"
+      - "127.0.0.1:6382:6379"
     command: redis-server --appendonly yes --port 6379
     volumes:
       - redis-4-data:/data
@@ -67,7 +67,7 @@ services:
   redis-5:
     image: redis:7-alpine
     ports:
-      - "6383:6379"
+      - "127.0.0.1:6383:6379"
     command: redis-server --appendonly yes --port 6379
     volumes:
       - redis-5-data:/data
@@ -83,7 +83,7 @@ services:
   valkey-1:
     image: valkey/valkey:8-alpine
     ports:
-      - "6390:6379"
+      - "127.0.0.1:6390:6379"
     command: valkey-server --appendonly yes
     volumes:
       - valkey-1-data:/data
