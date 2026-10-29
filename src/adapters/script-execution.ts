@@ -16,6 +16,24 @@ export interface ScriptCalls {
 }
 
 /**
+ * Key of an optional adapter method that releases a lock with EVAL, sending the script itself,
+ * so it works whatever the server's script cache holds (first use, restart, failover, SCRIPT
+ * FLUSH). Best-effort cleanup uses it when an adapter has it, and delIfMatch otherwise.
+ * @internal
+ */
+export const RELEASE_WITH_SCRIPT_BODY: unique symbol = Symbol.for(
+  'redlock-universal.releaseWithScriptBody'
+);
+
+/**
+ * Adapter that can release a lock by sending the release script itself
+ * @internal
+ */
+export interface ReleaseWithScriptBody {
+  [RELEASE_WITH_SCRIPT_BODY](key: string, value: string): Promise<boolean>;
+}
+
+/**
  * Whether an error means the server does not have the script cached
  * @internal
  */

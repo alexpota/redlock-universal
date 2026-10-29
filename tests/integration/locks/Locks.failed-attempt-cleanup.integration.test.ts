@@ -148,9 +148,11 @@ describe.each(Object.entries(CLIENTS))('%s attempt that times out', (_client, co
   });
 
   it.each(Object.entries(PRODUCERS))(
-    'removes the keys a timed-out %s attempt set',
+    'removes the keys a timed-out %s attempt set, even with an empty script cache',
     async (_producer, produce) => {
       const holder = await timingOut(produce, generateTestKey('timed-out-attempt'));
+      // As after a restart or failover: the release script is not cached on the server
+      await reader(0).script('FLUSH');
 
       await expect(holder.acquire()).rejects.toBeInstanceOf(LockAcquisitionError);
       await delay(SETTLE_MS);

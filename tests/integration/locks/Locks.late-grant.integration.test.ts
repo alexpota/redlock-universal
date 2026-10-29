@@ -7,6 +7,7 @@ import {
   LockAcquisitionError,
   LockManager,
 } from '../../../src/index.js';
+import { BATCH_ACQUIRE_SCRIPT } from '../../../src/adapters/BaseAdapter.js';
 import type { LockHandle } from '../../../src/types/locks.js';
 import { delay, generateTestKey, getRedisUrl, REDIS_CONFIG } from '../../shared/constants.js';
 import { startReplyDelayProxy, type ReplyDelayProxy } from '../../shared/reply-delay-proxy.js';
@@ -134,6 +135,9 @@ describe.each(Object.entries(PRODUCERS))('%s with late replies', (_name, produce
     async () => {
       const key = generateTestKey('late-grant');
       const late = await behindProxy(key, TTL, LATE_REPLY_MS);
+      // With the batch script cached, the late attempt sets its keys at once instead of
+      // spending a second slow round trip on the EVAL fallback
+      await direct(0).script('LOAD', BATCH_ACQUIRE_SCRIPT);
       // The competitor's lock outlives the late holder's attempt, so a wrong release would show
       const competitor = produce(key, LONG_TTL, direct);
 
