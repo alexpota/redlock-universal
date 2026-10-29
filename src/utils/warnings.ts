@@ -2,7 +2,16 @@
  * One-time process warnings
  */
 
+import { SYMBOL_KEY_PREFIX } from './symbol-keys.js';
+
 const WARNING_TYPE = 'RedlockUniversalWarning';
+
+/**
+ * Process-wide flag that records that the warning with this code was emitted
+ */
+export function warningFlag(code: string): symbol {
+  return Symbol.for(`${SYMBOL_KEY_PREFIX}warned.${code}`);
+}
 
 /**
  * Emit a process warning the first time its code is seen in this process.
@@ -12,7 +21,7 @@ const WARNING_TYPE = 'RedlockUniversalWarning';
  * @returns true when this call emitted the warning
  */
 export function emitWarningOnce(code: string, message: string): boolean {
-  const flag = Symbol.for(`redlock-universal.warned.${code}`);
+  const flag = warningFlag(code);
   const registry = globalThis as Record<symbol, unknown>;
 
   if (registry[flag]) {

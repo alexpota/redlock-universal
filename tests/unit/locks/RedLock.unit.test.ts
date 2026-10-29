@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
 import { LockManager } from '../../../src/manager/LockManager.js';
+import { warningFlag } from '../../../src/utils/warnings.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 import type { LockHandle, RedLockConfig } from '../../../src/types/locks.js';
 import {
@@ -728,10 +729,13 @@ describe('RedLock', () => {
 });
 
 describe('RedLock minority quorum warning', () => {
-  const warnedFlag = Symbol.for('redlock-universal.warned.REDLOCK_UNIVERSAL_MINORITY_QUORUM');
+  const warnedFlag = warningFlag('REDLOCK_UNIVERSAL_MINORITY_QUORUM');
   const registry = globalThis as Record<symbol, unknown>;
-  const nodes = (count: number): MockRedisAdapter[] =>
-    Array.from({ length: count }, (_, index) => new MockRedisAdapter(`redis-${index + 1}`));
+  const nodes = (count: number): RedisAdapter[] =>
+    Array.from(
+      { length: count },
+      (_, index) => new MockRedisAdapter(`redis-${index + 1}`) as unknown as RedisAdapter
+    );
   let emitWarning: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {

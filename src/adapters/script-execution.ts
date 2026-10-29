@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { SYMBOL_KEY_PREFIX } from '../utils/symbol-keys.js';
 
 /** Matches the NOSCRIPT server reply and GLIDE's NoScriptError */
 const NO_SCRIPT_PATTERN = /noscript/i;
@@ -22,7 +23,7 @@ export interface ScriptCalls {
  * @internal
  */
 export const RELEASE_WITH_SCRIPT_BODY: unique symbol = Symbol.for(
-  'redlock-universal.releaseWithScriptBody'
+  `${SYMBOL_KEY_PREFIX}releaseWithScriptBody`
 );
 
 /**

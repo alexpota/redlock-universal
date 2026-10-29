@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IoredisAdapter } from '../../../src/adapters/IoredisAdapter.js';
+import { Logger } from '../../../src/monitoring/Logger.js';
+import { warningFlag } from '../../../src/utils/warnings.js';
 import {
   DELETE_IF_MATCH_SCRIPT,
   EXTEND_IF_MATCH_SCRIPT,
@@ -309,7 +311,7 @@ describe('IoredisAdapter Unit Tests', () => {
 });
 
 describe('IoredisAdapter double key prefix warning', () => {
-  const warnedFlag = Symbol.for('redlock-universal.warned.REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX');
+  const warnedFlag = warningFlag('REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX');
   const registry = globalThis as Record<symbol, unknown>;
   const clientWith = (options: Record<string, unknown>) => ({ options, status: 'ready' }) as never;
   let emitWarning: ReturnType<typeof vi.spyOn>;
@@ -325,7 +327,8 @@ describe('IoredisAdapter double key prefix warning', () => {
   });
 
   it('should warn once when both the client and the adapter set a key prefix', () => {
-    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const logger = new Logger({ enableConsole: false });
+    const warn = vi.spyOn(logger, 'warn');
 
     new IoredisAdapter(clientWith({ keyPrefix: 'app:' }), { keyPrefix: 'locks:', logger });
     new IoredisAdapter(clientWith({ keyPrefix: 'app:' }), { keyPrefix: 'locks:', logger });
@@ -335,7 +338,7 @@ describe('IoredisAdapter double key prefix warning', () => {
       expect.stringContaining('"app:locks:<key>"'),
       expect.objectContaining({ code: 'REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX' })
     );
-    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it.each([
