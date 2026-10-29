@@ -16,8 +16,11 @@ import {
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
 import { executeScript } from './script-execution.js';
+import { emitWarningOnce } from '../utils/warnings.js';
 
 type IoredisClient = Redis | Cluster;
+
+const DOUBLE_KEY_PREFIX_WARNING_CODE = 'REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX';
 
 // Redis command constants
 const REDIS_STATUS_READY = 'ready';
@@ -32,6 +35,27 @@ export class IoredisAdapter extends BaseAdapter {
   constructor(client: IoredisClient, options: RedisAdapterOptions = {}) {
     super(options);
     this.client = client;
+    this.warnIfDoubleKeyPrefix();
+  }
+
+  /**
+   * Warn once per process when the client and the adapter both set a key prefix: ioredis puts
+   * its own prefix in front of the adapter's, so every lock key carries both
+   */
+  private warnIfDoubleKeyPrefix(): void {
+    const clientPrefix = this.client.options?.keyPrefix;
+    const adapterPrefix = this.options.keyPrefix;
+    if (!clientPrefix || !adapterPrefix) {
+      return;
+    }
+
+    const message =
+      `ioredis keyPrefix "${clientPrefix}" and adapter keyPrefix "${adapterPrefix}" are both set, ` +
+      `so lock keys are stored as "${clientPrefix}${adapterPrefix}<key>". Set the prefix in one place.`;
+
+    if (emitWarningOnce(DOUBLE_KEY_PREFIX_WARNING_CODE, message)) {
+      this.options.logger?.warn(message, { clientPrefix, adapterPrefix });
+    }
   }
 
   /**

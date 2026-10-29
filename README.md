@@ -238,7 +238,7 @@ const adapter = new NodeRedisAdapter(client, { keyPrefix: 'myapp:' });
 // The lock key 'orders:42' is stored in Redis as 'myapp:orders:42'
 ```
 
-Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the adapter's prefix, except the message of `signal.error` after a failed extension, which shows the key as stored.
+Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. `IoredisAdapter` emits a one-time process warning (`REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX`) when both are set. Errors and logs report the lock key without the adapter's prefix, except the message of `signal.error` after a failed extension, which shows the key as stored.
 
 ## Configuration
 

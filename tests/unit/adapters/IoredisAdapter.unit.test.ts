@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { IoredisAdapter } from '../../../src/adapters/IoredisAdapter.js';
 import {
   DELETE_IF_MATCH_SCRIPT,
@@ -305,5 +305,45 @@ describe('IoredisAdapter Unit Tests', () => {
       const clusterAdapter = new IoredisAdapter(mockClusterClient as any);
       expect(clusterAdapter.getClient()).toBe(mockClusterClient);
     });
+  });
+});
+
+describe('IoredisAdapter double key prefix warning', () => {
+  const warnedFlag = Symbol.for('redlock-universal.warned.REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX');
+  const registry = globalThis as Record<symbol, unknown>;
+  const clientWith = (options: Record<string, unknown>) => ({ options, status: 'ready' }) as never;
+  let emitWarning: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    delete registry[warnedFlag];
+    emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    emitWarning.mockRestore();
+    delete registry[warnedFlag];
+  });
+
+  it('should warn once when both the client and the adapter set a key prefix', () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    new IoredisAdapter(clientWith({ keyPrefix: 'app:' }), { keyPrefix: 'locks:', logger });
+    new IoredisAdapter(clientWith({ keyPrefix: 'app:' }), { keyPrefix: 'locks:', logger });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('"app:locks:<key>"'),
+      expect.objectContaining({ code: 'REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX' })
+    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['only the client', { keyPrefix: 'app:' }, {}],
+    ['only the adapter', {}, { keyPrefix: 'locks:' }],
+  ])('should not warn when %s sets a key prefix', (_where, clientOptions, adapterOptions) => {
+    new IoredisAdapter(clientWith(clientOptions), adapterOptions);
+
+    expect(emitWarning).not.toHaveBeenCalled();
   });
 });
