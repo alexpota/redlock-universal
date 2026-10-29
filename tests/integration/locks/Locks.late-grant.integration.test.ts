@@ -172,8 +172,9 @@ describe.each(Object.entries(PRODUCERS))('%s with late replies', (_name, produce
       const handles = await slow.acquire();
 
       for (const handle of handles) {
-        const believedRemaining = handle.acquiredAt + LONG_TTL - driftFor(LONG_TTL) - Date.now();
         for (const reader of readers) {
+          // Taken right before each read, so earlier reads do not count against this node
+          const believedRemaining = handle.acquiredAt + LONG_TTL - driftFor(LONG_TTL) - Date.now();
           const startedAt = performance.now();
           const [value, pttl] = await Promise.all([
             reader.get(handle.key),
