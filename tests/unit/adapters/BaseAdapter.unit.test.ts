@@ -54,6 +54,10 @@ class TestAdapter extends BaseAdapter {
   public testWithTimeout<T>(operation: Promise<T>, timeout?: number): Promise<T> {
     return this.withTimeout(operation, timeout);
   }
+
+  public testExecuteScript(): Promise<unknown> {
+    return this._executeScript('test-script', 'return 1', [], []);
+  }
 }
 
 describe('BaseAdapter', () => {
@@ -202,6 +206,16 @@ describe('BaseAdapter', () => {
 
       await expect(adapter.testWithTimeout(operation)).rejects.toThrow(
         'Operation timed out after 100ms'
+      );
+    });
+  });
+
+  describe('_executeScript', () => {
+    it('should reject when the adapter does not provide script calls', async () => {
+      const adapter = new TestAdapter();
+
+      await expect(adapter.testExecuteScript()).rejects.toThrow(
+        'This adapter does not provide script calls'
       );
     });
   });
