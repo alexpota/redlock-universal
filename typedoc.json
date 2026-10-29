@@ -1,0 +1,26 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "site",
+  "readme": "README.md",
+  "projectDocuments": ["SAFETY.md"],
+  "highlightLanguages": [
+    "bash",
+    "console",
+    "css",
+    "html",
+    "javascript",
+    "json",
+    "jsonc",
+    "json5",
+    "yaml",
+    "tsx",
+    "typescript",
+    "sql"
+  ],
+  "hostedBaseUrl": "https://redlock-universal.dev/",
+  "navigationLinks": {
+    "GitHub": "https://github.com/alexpota/redlock-universal",
+    "npm": "https://www.npmjs.com/package/redlock-universal"
+  }
+}

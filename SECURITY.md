@@ -2,11 +2,12 @@
 
 ## Supported Versions
 
-We take security seriously and provide security updates for the following versions:
+Security fixes are released for the latest minor version.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.8.x   | :white_check_mark: |
+| < 0.8   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -16,7 +17,7 @@ If you discover a security vulnerability in redlock-universal, please help us ma
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to: **alex.potapenko.dev@gmail.com**
+Instead, report it privately through GitHub: open the repository's **Security** tab and choose **Report a vulnerability**, or go directly to [github.com/alexpota/redlock-universal/security/advisories/new](https://github.com/alexpota/redlock-universal/security/advisories/new).
 
 Include the following information:
 - Description of the vulnerability
@@ -47,14 +48,15 @@ When using redlock-universal in production:
 4. **Monitoring**: Implement proper logging and monitoring of lock operations
 5. **Updates**: Keep redlock-universal and its dependencies up to date
 
+For what a lock does and does not guarantee, see [SAFETY.md](SAFETY.md).
+
 ### Security Features
 
-redlock-universal includes several security-conscious design decisions:
-
-- **Cryptographically secure lock identifiers** using Node.js crypto module
-- **Time-based lock expiration** to prevent indefinite resource locking
-- **No sensitive data logging** in production builds
-- **Zero runtime dependencies** to minimize supply chain risks
-- **Strict TypeScript** compilation to catch potential issues at build time
+- **Random lock values:** `SimpleLock`, `RedLock` and `LockManager` generate lock values with Node.js `crypto.randomFillSync`. The `lean` performance mode builds them from a timestamp, `Math.random()` and the process ID instead.
+- **Owner-checked release and extension:** a lock is only released or extended when its stored value matches the handle's value, checked atomically in a Lua script.
+- **Expiring locks:** every lock is written with a TTL, so a lock held by a crashed process expires.
+- **No lock values in logs:** lock values are not passed to the logger.
+- **No runtime dependencies:** the Redis clients are optional peer dependencies.
+- **Signed releases:** releases are published from GitHub Actions with npm trusted publishing and carry npm provenance attestations.
 
 Thank you for helping keep redlock-universal and the Node.js ecosystem secure.

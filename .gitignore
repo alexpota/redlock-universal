@@ -45,6 +45,7 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+dump.rdb
 
 # Temporary folders
 tmp/
@@ -53,3 +54,4 @@ temp/
 # Documentation output
 docs/
 typedoc/
+site/

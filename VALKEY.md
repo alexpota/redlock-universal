@@ -1,33 +1,39 @@
 # Valkey Support
 
-[Valkey](https://valkey.io) is an open-source, high-performance key-value store
-that originated as a fork of Redis. It's now maintained by the Linux Foundation
-with backing from major cloud providers including AWS, Google Cloud, Oracle, and
-Ericsson.
+[Valkey](https://valkey.io) is an open-source key-value store forked from Redis
+7.2.4 in 2024. It is a Linux Foundation project.
 
-redlock-universal provides full support for Valkey through multiple client
-options, ensuring you can use the same distributed locking patterns regardless
-of your chosen data store.
+redlock-universal works with Valkey through node-redis, ioredis or Valkey GLIDE.
+CI runs the integration and end-to-end tests against Valkey 8 as well as Redis 7.
 
 ## Compatibility Matrix
 
-| Client Library   | Redis 7+ | Valkey 8+ | Notes                           |
-| ---------------- | -------- | --------- | ------------------------------- |
-| node-redis       | Yes      | Yes       | Official Redis client           |
-| ioredis          | Yes      | Yes       | Popular community client        |
-| Valkey GLIDE     | No       | Yes       | Official Valkey client (Rust)   |
+| Client Library | Redis 7 | Valkey 8 | Versions tested in CI                           |
+| -------------- | ------- | -------- | ----------------------------------------------- |
+| node-redis     | Yes     | Yes      | 4.7.1; 5.12.1 and 6.3.0 in the cluster workflow |
+| ioredis        | Yes     | Yes      | 5.11.1; 6.0.0 in the cluster workflow           |
+| Valkey GLIDE   | Yes     | Yes      | 2.4.2; 2.5.3 in the cluster workflow            |
+
+CI runs the `redis:7-alpine` and `valkey/valkey:8-alpine` images, standalone
+and as a three-primary cluster. Other server versions are not tested. The full
+GLIDE adapter suite runs against Valkey; against Redis, CI runs the GLIDE script
+and cluster tests.
 
 ## Using Valkey GLIDE
 
-[Valkey GLIDE](https://github.com/valkey-io/valkey-glide) is the official
-Valkey client, built with a Rust core for maximum performance. redlock-universal
-provides a dedicated adapter for GLIDE integration.
+[Valkey GLIDE](https://github.com/valkey-io/valkey-glide) is the Valkey
+project's client library, with a Rust core and Node.js bindings.
+redlock-universal wraps it with `GlideAdapter`.
 
 ### Installation
 
 ```bash
 npm install redlock-universal @valkey/valkey-glide
 ```
+
+`@valkey/valkey-glide` is an optional peer dependency (`>=2.0.0`). GLIDE ships
+native builds for Linux (x64 and arm64, glibc and musl) and macOS, not for
+Windows.
 
 ### Basic Usage
 
@@ -45,7 +51,7 @@ const adapter = new GlideAdapter(glideClient);
 
 // Create lock
 const lock = createLock({
-  client: adapter,
+  adapter,
   key: 'my-resource',
   ttl: 30000,
 });
@@ -59,7 +65,7 @@ try {
 }
 
 // Clean up
-glideClient.close();
+await adapter.disconnect();
 ```
 
 ### Cluster Mode
@@ -81,25 +87,30 @@ const adapter = new GlideAdapter(clusterClient);
 
 const manager = new LockManager({
   nodes: [adapter],
-  defaultTtl: 30000,
+  defaultTTL: 30000,
 });
 
-// Acquire locks
-await manager.using('resource-key', async (signal) => {
-  // Auto-extending lock with abort signal
+// Auto-extending lock with abort signal
+await manager.createSimpleLock('resource-key').using(async (signal) => {
+  // Critical section
 });
 ```
+
+Cluster mode is tested from redlock-universal 0.8.9. The keys passed to
+`acquireBatch()` or `usingBatch()` are written by one script, so on a cluster
+they must hash to one slot: give them a shared hash tag, such as
+`{order:42}:payment` and `{order:42}:stock`.
 
 ## Using Existing Clients with Valkey
 
 If you're already using node-redis or ioredis, you can connect to Valkey without
-any code changes. Valkey is wire-protocol compatible with Redis.
+any code changes: Valkey uses the same protocol as Redis.
 
 ### ioredis with Valkey
 
 ```typescript
-import Redis from 'ioredis';
-import { createLock } from 'redlock-universal';
+import { Redis } from 'ioredis';
+import { createLock, IoredisAdapter } from 'redlock-universal';
 
 // Connect to Valkey (same as Redis)
 const client = new Redis({
@@ -108,7 +119,7 @@ const client = new Redis({
 });
 
 const lock = createLock({
-  client,
+  adapter: new IoredisAdapter(client),
   key: 'resource',
   ttl: 30000,
 });
@@ -118,7 +129,7 @@ const lock = createLock({
 
 ```typescript
 import { createClient } from 'redis';
-import { createLock } from 'redlock-universal';
+import { createLock, NodeRedisAdapter } from 'redlock-universal';
 
 // Connect to Valkey (same as Redis)
 const client = createClient({
@@ -127,7 +138,7 @@ const client = createClient({
 await client.connect();
 
 const lock = createLock({
-  client,
+  adapter: new NodeRedisAdapter(client),
   key: 'resource',
   ttl: 30000,
 });
@@ -139,7 +150,7 @@ const lock = createLock({
 
 ```bash
 # Start Valkey container
-docker run -d --name valkey -p 6379:6379 valkey/valkey:8-alpine
+docker run -d --name valkey -p 127.0.0.1:6379:6379 valkey/valkey:8-alpine
 
 # Verify it's running
 docker exec valkey valkey-cli PING
@@ -148,13 +159,11 @@ docker exec valkey valkey-cli PING
 ### Docker Compose
 
 ```yaml
-version: '3.8'
-
 services:
   valkey:
     image: valkey/valkey:8-alpine
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - valkey-data:/data
     command: valkey-server --appendonly yes
@@ -171,61 +180,58 @@ volumes:
 ### Multi-Node Setup for Redlock Testing
 
 ```yaml
-version: '3.8'
-
 services:
   valkey1:
     image: valkey/valkey:8-alpine
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
 
   valkey2:
     image: valkey/valkey:8-alpine
     ports:
-      - '6380:6379'
+      - '127.0.0.1:6380:6379'
 
   valkey3:
     image: valkey/valkey:8-alpine
     ports:
-      - '6381:6379'
+      - '127.0.0.1:6381:6379'
 ```
 
 ## Migration from Redis to Valkey
 
-Valkey maintains 100% compatibility with Redis at the protocol level. For
-distributed locking with redlock-universal, migration requires no code changes:
+Valkey supports every command redlock-universal sends, and the same tests run
+against both servers in CI. Migration requires no code changes:
 
 1. **Update your connection URLs** to point to Valkey instances
-2. **No library changes needed** - redlock-universal works identically
-3. **All locking commands are fully supported** (see Feature Parity below)
+2. **No library changes needed**: the same adapters and lock code work on both
+3. **Switch all clients together.** Locks are not copied between servers: a
+   client still connected to the old server and a client on the new one do not
+   see each other's locks.
 
 ### Why Consider Valkey GLIDE?
 
-While ioredis and node-redis work perfectly with Valkey, you might consider
-switching to GLIDE for:
+ioredis and node-redis work with Valkey. GLIDE is an option when you want:
 
-- **Performance**: Rust-based core with optimized memory management
-- **Official Support**: Maintained by the Valkey project itself
-- **Future Features**: First to receive Valkey-specific optimizations
-- **Unified API**: Same client works across multiple programming languages
+- **A client maintained by the Valkey project**
+- **One Rust core** shared with GLIDE's Java, Python and Go clients
 
-## Feature Parity
+## Commands Used
 
-All locking-related commands used by redlock-universal are fully supported:
+redlock-universal sends these commands. Redis 7 and Valkey 8 support all of
+them.
 
-| Command        | Redis 7+ | Valkey 8+ | Usage in redlock-universal     |
-| -------------- | -------- | --------- | ------------------------------ |
-| SET NX PX      | Yes      | Yes       | Lock acquisition               |
-| GET            | Yes      | Yes       | Lock validation                |
-| EVAL/EVALSHA   | Yes      | Yes       | Atomic release/extend scripts  |
-| SCRIPT LOAD    | Yes      | Yes       | Lua script caching             |
-| PTTL           | Yes      | Yes       | TTL checking                   |
-| DEL            | Yes      | Yes       | Lock cleanup                   |
+| Command                            | Usage in redlock-universal                                   |
+| ---------------------------------- | ------------------------------------------------------------ |
+| SET NX PX                          | Lock acquisition                                             |
+| GET                                | `isLocked()`, and inside the scripts                         |
+| EVALSHA / EVAL                     | Release, extend, inspect and batch scripts; EVAL resends a script the server no longer has |
+| DEL, PEXPIRE, PTTL, EXISTS, SET PX | Inside the Lua scripts                                       |
+| PING                               | Health checks                                                |
 
 ## Resources
 
 - [Valkey Official Website](https://valkey.io)
 - [Valkey GLIDE GitHub](https://github.com/valkey-io/valkey-glide)
 - [Valkey Documentation](https://valkey.io/docs/)
-- [Migration Guide: Redis to Valkey](https://valkey.io/docs/topics/migration/)
+- [Migration Guide: Redis to Valkey](https://valkey.io/topics/migration/)
 - [Valkey Docker Hub](https://hub.docker.com/r/valkey/valkey)
