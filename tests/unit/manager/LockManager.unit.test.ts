@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LockManager } from '../../../src/manager/LockManager.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
+import type { LockHandle } from '../../../src/types/locks.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -344,5 +345,54 @@ describe('LockManager', () => {
       expect(metrics).toContain('redlock_locks_acquired_total');
       expect(metrics).toContain('redlock_acquisition_duration_ms');
     });
+  });
+});
+
+describe('LockManager lock tracking', () => {
+  const HOLD_MS = 20;
+  const createBatchNode = (): RedisAdapter =>
+    ({
+      batchSetNX: vi.fn(async (keys: string[]) => ({ success: true, acquiredCount: keys.length })),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+      isConnected: vi.fn().mockReturnValue(true),
+    }) as unknown as RedisAdapter;
+
+  it('should not count a handle that is released twice', async () => {
+    const manager = new LockManager({ nodes: [new MockRedisAdapter()] });
+    const handle = await manager.acquireLock('tracked');
+
+    await manager.releaseLock(handle);
+    await manager.releaseLock(handle);
+
+    expect(manager.getStats().activeLocks).toBe(0);
+  });
+
+  it('should record hold time only for handles it tracks', async () => {
+    const manager = new LockManager({ nodes: [new MockRedisAdapter()] });
+    const untracked: LockHandle = {
+      id: 'untracked',
+      key: 'other',
+      value: 'other-value',
+      acquiredAt: Date.now() - 60_000,
+      ttl: 30_000,
+    };
+
+    await manager.releaseLock(untracked);
+    await manager.releaseBatch([untracked]);
+
+    expect(manager.getStats().averageHoldTime).toBe(0);
+  });
+
+  it('should record hold times for usingBatch', async () => {
+    const manager = new LockManager({ nodes: [createBatchNode()] });
+
+    await manager.usingBatch(
+      ['a', 'b'],
+      () => new Promise(resolve => setTimeout(resolve, HOLD_MS))
+    );
+
+    const stats = manager.getStats();
+    expect(stats.activeLocks).toBe(0);
+    expect(stats.averageHoldTime).toBeGreaterThanOrEqual(HOLD_MS - 1);
   });
 });

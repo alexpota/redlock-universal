@@ -200,10 +200,7 @@ export class LockManager {
    * Release a tracked lock
    */
   async releaseLock(handle: LockHandle): Promise<boolean> {
-    this.recordHoldTime(Date.now() - handle.acquiredAt);
-
-    this.activeLocks.delete(handle.id);
-    this.stats.activeLocks--;
+    this.untrackLock(handle);
     const lock =
       handle.metadata?.strategy === 'redlock'
         ? this.createRedLock(handle.key)
@@ -433,11 +430,12 @@ export class LockManager {
   }
 
   /**
-   * Stop tracking a lock as active (no-op if it is not tracked)
+   * Stop tracking a lock and record how long it was held (no-op if it is not tracked)
    */
   private untrackLock(handle: LockHandle): void {
     if (this.activeLocks.delete(handle.id)) {
       this.stats.activeLocks--;
+      this.recordHoldTime(Date.now() - handle.acquiredAt);
     }
   }
 
@@ -457,7 +455,6 @@ export class LockManager {
    */
   async releaseBatch(handles: LockHandle[]): Promise<boolean[]> {
     const releasePromises = handles.map(async handle => {
-      this.recordHoldTime(Date.now() - handle.acquiredAt);
       this.untrackLock(handle);
 
       const lock = this.createSimpleLock(handle.key, { nodeIndex: this.batchNodeIndex(handle) });
