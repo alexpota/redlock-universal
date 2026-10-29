@@ -147,12 +147,15 @@ describe('Logger', () => {
       logger = new Logger({ level: LogLevel.DEBUG, enableConsole: true, enableCollection: false });
       const createAdapter = (): RedisAdapter =>
         ({
-          setNX: vi.fn().mockResolvedValue('OK'),
-          ping: vi.fn().mockRejectedValue(new Error('ping failed')),
+          setNX: vi.fn().mockRejectedValue(new Error('Redis down')),
         }) as unknown as RedisAdapter;
+      const acquireFailing = (key: string): Promise<unknown> =>
+        new SimpleLock({ adapter: createAdapter(), key, logger, retryAttempts: 0 })
+          .acquire()
+          .catch(() => undefined);
 
-      await new SimpleLock({ adapter: createAdapter(), key: 'lock-a', logger }).acquire();
-      await new SimpleLock({ adapter: createAdapter(), key: 'lock-b', logger }).acquire();
+      await acquireFailing('lock-a');
+      await acquireFailing('lock-b');
 
       const lines = vi
         .mocked(console.error)

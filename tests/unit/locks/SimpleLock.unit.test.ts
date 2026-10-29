@@ -424,6 +424,38 @@ describe('SimpleLock Unit Tests', () => {
     });
   });
 
+  describe('health', () => {
+    it('should not send a PING before acquiring', async () => {
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+
+      await lock.acquire();
+
+      expect(mockAdapter.ping).not.toHaveBeenCalled();
+    });
+
+    it('should report health from the outcome of its SET commands', async () => {
+      const healthLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+      });
+
+      mockAdapter.setNX = vi
+        .fn()
+        .mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:6379'));
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      const afterFailure = healthLock.getHealth();
+      expect(afterFailure.healthy).toBe(false);
+      expect(afterFailure.lastCheck).toBeGreaterThan(0);
+
+      // A "lock is held" reply still shows the server is reachable
+      mockAdapter.setNX = vi.fn().mockResolvedValue(null);
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      expect(healthLock.getHealth().healthy).toBe(true);
+    });
+  });
+
   describe('circuit breaker', () => {
     it('should stay closed when failures are below threshold', async () => {
       const cbLock = new SimpleLock({

@@ -31,7 +31,6 @@ export class SimpleLock implements Lock {
   private _configCache?: Readonly<SimpleLockConfig>;
 
   private _lastHealthCheck: number = 0;
-  private _healthCheckInterval: number = DEFAULTS.HEALTH_CHECK_INTERVAL;
   private _isHealthy: boolean = true;
 
   private _circuitBreakerFailures: number = 0;
@@ -81,14 +80,13 @@ export class SimpleLock implements Lock {
           }
           this._circuitBreakerTimeout = cbConfig.resetTimeout;
         }
-        if (cbConfig.healthCheckInterval !== undefined) {
-          if (
-            cbConfig.healthCheckInterval <= 0 ||
-            !Number.isInteger(cbConfig.healthCheckInterval)
-          ) {
+        // The option no longer has an effect, but a value that is set is still validated
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        const { healthCheckInterval } = cbConfig;
+        if (healthCheckInterval !== undefined) {
+          if (healthCheckInterval <= 0 || !Number.isInteger(healthCheckInterval)) {
             throw new Error('Circuit breaker healthCheckInterval must be a positive integer');
           }
-          this._healthCheckInterval = cbConfig.healthCheckInterval;
         }
       }
     }
@@ -174,34 +172,27 @@ export class SimpleLock implements Lock {
   }
 
   /**
-   * Check Redis connection health periodically
+   * Track connection health from the outcome of a lock command: any reply shows the server
+   * is reachable, an error shows it may not be. Logs only when the health changes
    */
-  private async checkConnectionHealth(): Promise<void> {
-    const now = Date.now();
-    if (now - this._lastHealthCheck < this._healthCheckInterval) {
+  private recordHealth(error?: Error): void {
+    this._lastHealthCheck = Date.now();
+
+    const isHealthy = error === undefined;
+    if (isHealthy === this._isHealthy) {
       return;
     }
 
-    this._lastHealthCheck = now;
-
-    try {
-      await this.adapter.ping();
-      this.updateCircuitBreaker(true);
-      if (!this._isHealthy) {
-        this._isHealthy = true;
-        if (this.logger) {
-          this.logger.info('Redis connection recovered', {
-            key: this.key,
-            correlationId: this.correlationId,
-            healthStatus: 'recovered',
-          });
-        }
-      }
-    } catch (error) {
-      this._isHealthy = false;
-      this.updateCircuitBreaker(false);
-      if (this.logger) {
-        this.logger.error('Redis health check failed', error as Error, {
+    this._isHealthy = isHealthy;
+    if (this.logger) {
+      if (isHealthy) {
+        this.logger.info('Redis connection recovered', {
+          key: this.key,
+          correlationId: this.correlationId,
+          healthStatus: 'recovered',
+        });
+      } else {
+        this.logger.error('Redis health check failed', error, {
           key: this.key,
           correlationId: this.correlationId,
           healthStatus: 'failed',
@@ -244,10 +235,6 @@ export class SimpleLock implements Lock {
       }
     }
 
-    if (this._circuitBreakerEnabled) {
-      await this.checkConnectionHealth();
-    }
-
     const startTime = Date.now();
     const drift = clockDriftFor(this.ttl);
     let lastError: Error | null = null;
@@ -264,6 +251,7 @@ export class SimpleLock implements Lock {
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(true);
+          this.recordHealth();
         }
 
         if (result === REDIS_OK_RESPONSE && elapsed + drift < this.ttl) {
@@ -301,6 +289,7 @@ export class SimpleLock implements Lock {
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(false);
+          this.recordHealth(lastError);
         }
 
         if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {

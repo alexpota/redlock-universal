@@ -59,7 +59,10 @@ export interface CircuitBreakerConfig {
   readonly failureThreshold?: number;
   /** Time in ms before probing after circuit opens (default: 60000) */
   readonly resetTimeout?: number;
-  /** Health check interval in ms (default: 30000) */
+  /**
+   * @deprecated Has no effect: health follows the outcome of the lock's own commands, with no
+   * separate PING. The value is still validated
+   */
   readonly healthCheckInterval?: number;
 }
 

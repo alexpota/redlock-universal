@@ -434,9 +434,8 @@ SimpleLock includes a built-in circuit breaker that fast-fails when Redis is per
 const lock = createLock({
   adapter, key: 'resource',
   circuitBreaker: {
-    failureThreshold: 5,       // Consecutive failures to trip (default: 5)
-    resetTimeout: 60000,       // Ms before probing recovery (default: 60000)
-    healthCheckInterval: 30000 // Ms between health checks (default: 30000)
+    failureThreshold: 5,  // Consecutive failures to trip (default: 5)
+    resetTimeout: 60000,  // Ms before probing recovery (default: 60000)
   }
 });
 
@@ -450,7 +449,7 @@ const health = (lock as SimpleLock).getHealth();
 
 The circuit breaker is available in `standard` and `enterprise` performance modes. The `lean` mode omits it for minimal memory overhead.
 
-Each lock instance has its own breaker. It health-checks the server with a `PING` before its first `acquire()`, then at most once per `healthCheckInterval`. A failed health check counts as a failure but does not fail the `acquire()`.
+Each lock instance has its own breaker. It counts failed lock commands; there is no separate `PING`, so the first `acquire()` against a server that is down fails after one command timeout. `getHealth()` reports the outcome of the lock's latest command, and `lastCheck` is when it arrived. The `healthCheckInterval` option is still accepted but has no effect.
 
 </details>
 
