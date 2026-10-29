@@ -270,23 +270,23 @@ describe('RedLock Multi-Instance Validation', () => {
   });
 
   describe('Clock Drift and Timing', () => {
-    it('should handle clock drift protection', async () => {
+    it('should handle clock drift protection', () => {
       const testKey = generateTestKey('multi-instance');
       const shortTTL = 10; // Extremely short TTL
-      const highDriftFactor = 0.9; // 90% clock drift tolerance
+      const highDriftFactor = 0.9; // 90% clock drift tolerance: an 11 ms allowance
 
-      const redlock = new RedLock({
-        adapters,
-        key: testKey,
-        ttl: shortTTL,
-        quorum: Math.floor(adapters.length / 2) + 1,
-        clockDriftFactor: highDriftFactor,
-        retryAttempts: 0, // No retries for timing test
-      });
-
-      // This should fail due to clock drift protection
-      // Even a 6ms acquisition + 90% drift = 11.4ms which exceeds 10ms TTL
-      await expect(redlock.acquire()).rejects.toThrow(LockAcquisitionError);
+      // The drift allowance alone uses up the TTL, so the lock could never be acquired
+      expect(
+        () =>
+          new RedLock({
+            adapters,
+            key: testKey,
+            ttl: shortTTL,
+            quorum: Math.floor(adapters.length / 2) + 1,
+            clockDriftFactor: highDriftFactor,
+            retryAttempts: 0,
+          })
+      ).toThrow(/TTL must be greater than its clock drift allowance/);
     });
 
     it('should succeed with reasonable TTL and clock drift', async () => {
