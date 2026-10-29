@@ -240,7 +240,12 @@ export class NodeRedisAdapter extends BaseAdapter {
     try {
       // Clear cached script SHAs on disconnect to prevent stale references
       this.scriptSHAs.clear();
-      await this.client.disconnect();
+      // node-redis 5 deprecates disconnect() in favour of destroy(); 4.x only has disconnect()
+      if (typeof this.client.destroy === 'function') {
+        this.client.destroy();
+      } else {
+        await this.client.disconnect();
+      }
     } catch (error) {
       if (this.options.logger) {
         this.options.logger.warn('Warning during Redis disconnect', {

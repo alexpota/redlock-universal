@@ -296,3 +296,22 @@ describe('NodeRedisAdapter Unit Tests', () => {
     });
   });
 });
+
+describe('NodeRedisAdapter disconnect across node-redis versions', () => {
+  it('should call destroy() on node-redis 5, where disconnect() is deprecated', async () => {
+    const client = { destroy: vi.fn(), disconnect: vi.fn(), isReady: true };
+
+    await new NodeRedisAdapter(client).disconnect();
+
+    expect(client.destroy).toHaveBeenCalledTimes(1);
+    expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('should call disconnect() on node-redis 4, which has no destroy()', async () => {
+    const client = { disconnect: vi.fn().mockResolvedValue(undefined), isReady: true };
+
+    await new NodeRedisAdapter(client).disconnect();
+
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+  });
+});
