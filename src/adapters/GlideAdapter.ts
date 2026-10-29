@@ -119,7 +119,7 @@ export class GlideAdapter extends BaseAdapter {
       }
       return this.normalizeGlideString(result);
     } catch (error) {
-      throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
+      throw new Error(`Failed to acquire lock: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -135,7 +135,7 @@ export class GlideAdapter extends BaseAdapter {
       }
       return this.normalizeGlideString(result);
     } catch (error) {
-      throw new Error(`Failed to get key: ${(error as Error).message}`);
+      throw new Error(`Failed to get key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -148,7 +148,7 @@ export class GlideAdapter extends BaseAdapter {
       // GLIDE del takes an array of keys
       return await this.withTimeout(this.client.del([prefixedKey]));
     } catch (error) {
-      throw new Error(`Failed to delete key: ${(error as Error).message}`);
+      throw new Error(`Failed to delete key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -248,7 +248,7 @@ export class GlideAdapter extends BaseAdapter {
       const result = await this.withTimeout(this.client.customCommand(['PING']));
       return result as string;
     } catch (error) {
-      throw new Error(`Ping failed: ${(error as Error).message}`);
+      throw new Error(`Ping failed: ${(error as Error).message}`, { cause: error });
     }
   }
 

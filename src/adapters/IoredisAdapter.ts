@@ -74,7 +74,7 @@ export class IoredisAdapter extends BaseAdapter {
 
       return result as string | null;
     } catch (error) {
-      throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
+      throw new Error(`Failed to acquire lock: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -86,7 +86,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.get(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to get key: ${(error as Error).message}`);
+      throw new Error(`Failed to get key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -98,7 +98,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.del(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to delete key: ${(error as Error).message}`);
+      throw new Error(`Failed to delete key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -197,7 +197,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.ping());
     } catch (error) {
-      throw new Error(`Ping failed: ${(error as Error).message}`);
+      throw new Error(`Ping failed: ${(error as Error).message}`, { cause: error });
     }
   }
 
