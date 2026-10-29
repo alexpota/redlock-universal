@@ -3,6 +3,7 @@ import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
+import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -248,26 +249,30 @@ export class SimpleLock implements Lock {
     }
 
     const startTime = Date.now();
+    const drift = clockDriftFor(this.ttl);
     let lastError: Error | null = null;
     const lockValue = generateLockValue();
 
     for (let attempt = 0; attempt <= this.retryAttempts; attempt++) {
       try {
+        // The server starts the TTL when it runs the SET, so the lock is valid from here
+        const sentAt = Date.now();
+        const startedAt = performance.now();
         const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
+        const elapsed = performance.now() - startedAt;
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(true);
         }
 
-        if (result === REDIS_OK_RESPONSE) {
+        if (result === REDIS_OK_RESPONSE && elapsed + drift < this.ttl) {
           const acquisitionTime = Date.now() - startTime;
-          const acquiredAt = Date.now();
 
           const handle: LockHandle = {
             id: generateLockId(),
             key: this.key,
             value: lockValue,
-            acquiredAt,
+            acquiredAt: sentAt,
             ttl: this.ttl,
             metadata: {
               attempts: attempt + 1,
@@ -281,7 +286,11 @@ export class SimpleLock implements Lock {
           return handle;
         }
 
-        if (!lastError) {
+        if (result === REDIS_OK_RESPONSE) {
+          // Granted too late to be safe: give the key back and try again
+          releaseQuietly(this.adapter, this.key, lockValue);
+          lastError = validityExceededError(elapsed, drift, this.ttl);
+        } else if (!lastError) {
           lastError = new Error(`Lock "${this.key}" is already held`);
         }
       } catch (error) {

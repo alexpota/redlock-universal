@@ -20,7 +20,11 @@ export interface LockHandle {
   /** Lock value (for safe release) */
   readonly value: string;
 
-  /** Timestamp when lock was acquired */
+  /**
+   * When the winning attempt was sent (Unix epoch ms). The server starts the TTL when it
+   * runs the command, so the lock is valid until acquiredAt + ttl minus the clock drift
+   * allowance, measured on this client's clock
+   */
   readonly acquiredAt: number;
 
   /** Lock TTL in milliseconds */

@@ -5,6 +5,7 @@ import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
+import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
@@ -276,6 +277,7 @@ export class LockManager {
     const retryAttempts = options.retryAttempts ?? this.config.defaultRetryAttempts;
     const retryDelay = options.retryDelay ?? this.config.defaultRetryDelay;
     const startTime = Date.now();
+    const drift = clockDriftFor(ttl);
     const sortedKeys = [...keys].sort();
     const values = sortedKeys.map(() => generateLockValue());
 
@@ -298,16 +300,20 @@ export class LockManager {
 
     for (let attempt = 0; attempt <= retryAttempts; attempt++) {
       try {
+        // The server starts the TTLs when it runs the script, so the locks are valid from here
+        const sentAt = Date.now();
+        const startedAt = performance.now();
         const result = await adapter.batchSetNX(sortedKeys, values, ttl);
+        const elapsed = performance.now() - startedAt;
 
-        if (result.success) {
+        if (result.success && elapsed + drift < ttl) {
           const acquisitionTime = Date.now() - startTime;
 
           const handles: LockHandle[] = sortedKeys.map((key, index) => ({
             id: generateLockId(),
             key,
             value: values[index]!,
-            acquiredAt: Date.now(),
+            acquiredAt: sentAt,
             ttl,
             metadata: {
               attempts: attempt + 1,
@@ -337,21 +343,29 @@ export class LockManager {
           return handles;
         }
 
-        // Acquisition failed - key is already locked
-        lastFailedKey = result.failedKey;
-        lastFailedIndex = result.failedIndex;
-        lastError = new Error(
-          `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
-        );
+        if (result.success) {
+          // Granted too late to be safe: give the keys back and try again
+          sortedKeys.forEach((key, index) => releaseQuietly(adapter, key, values[index]!));
+          lastError = validityExceededError(elapsed, drift, ttl);
+          lastFailedKey = sortedKeys[0];
+          lastFailedIndex = 0;
+        } else {
+          // Acquisition failed - key is already locked
+          lastFailedKey = result.failedKey;
+          lastFailedIndex = result.failedIndex;
+          lastError = new Error(
+            `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
+          );
 
-        if (this.config.logger && attempt < retryAttempts) {
-          this.config.logger.debug?.('Batch lock acquisition attempt failed, retrying', {
-            attempt: attempt + 1,
-            maxAttempts: retryAttempts + 1,
-            failedKey: result.failedKey,
-            failedIndex: result.failedIndex,
-            retryDelay,
-          });
+          if (this.config.logger && attempt < retryAttempts) {
+            this.config.logger.debug?.('Batch lock acquisition attempt failed, retrying', {
+              attempt: attempt + 1,
+              maxAttempts: retryAttempts + 1,
+              failedKey: result.failedKey,
+              failedIndex: result.failedIndex,
+              retryDelay,
+            });
+          }
         }
       } catch (error) {
         // Unexpected error (network, Redis, etc.)

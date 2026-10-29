@@ -6,6 +6,7 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue } from '../utils/crypto.js';
+import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -47,6 +48,7 @@ export class LeanSimpleLock implements Lock {
 
   async acquire(): Promise<LockHandle> {
     const startTime = Date.now();
+    const drift = clockDriftFor(this.t);
     let lastError: Error | null = null;
     let attempts = 0;
 
@@ -55,16 +57,20 @@ export class LeanSimpleLock implements Lock {
     for (let attempt = 0; attempt <= this.r; attempt++) {
       attempts++;
       try {
+        // The server starts the TTL when it runs the SET, so the lock is valid from here
+        const sentAt = Date.now();
+        const startedAt = performance.now();
         const result = await this.a.setNX(this.k, value, this.t);
+        const elapsed = performance.now() - startedAt;
 
-        if (result === REDIS_OK_RESPONSE) {
+        if (result === REDIS_OK_RESPONSE && elapsed + drift < this.t) {
           const acquisitionTime = Date.now() - startTime;
 
           return {
             id: value,
             key: this.k,
             value,
-            acquiredAt: startTime,
+            acquiredAt: sentAt,
             ttl: this.t,
             metadata: {
               attempts,
@@ -74,7 +80,13 @@ export class LeanSimpleLock implements Lock {
           };
         }
 
-        lastError = LOCK_HELD_ERROR;
+        if (result === REDIS_OK_RESPONSE) {
+          // Granted too late to be safe: give the key back and try again
+          releaseQuietly(this.a, this.k, value);
+          lastError = validityExceededError(elapsed, drift, this.t);
+        } else {
+          lastError = LOCK_HELD_ERROR;
+        }
       } catch (error) {
         lastError = error instanceof Error ? error : LOCK_HELD_ERROR;
       }

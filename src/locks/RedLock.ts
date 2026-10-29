@@ -10,6 +10,7 @@ import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../t
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { emitWarningOnce } from '../utils/warnings.js';
+import { clockDriftFor, validityExceededError } from '../utils/validity.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -130,7 +131,7 @@ export class RedLock implements Lock {
         const lockValue = generateLockValue();
         // Each node starts the TTL when it receives the request, so the lock is valid from here
         const attemptStartedAt = Date.now();
-        const result = await this.attemptLockAcquisition(lockValue);
+        const result = await this.attemptLockAcquisition(lockValue, performance.now());
 
         if (result.success) {
           const acquisitionTime = Date.now() - startTime;
@@ -149,9 +150,11 @@ export class RedLock implements Lock {
           };
         }
 
-        lastError = new Error(
-          `RedLock quorum not achieved: ${result.successCount}/${this.config.quorum} required`
-        );
+        lastError =
+          result.validityExceeded ??
+          new Error(
+            `RedLock quorum not achieved: ${result.successCount}/${this.config.quorum} required`
+          );
 
         // Release any partial locks acquired
         await this.releasePartialLocks(result.nodeResults, lockValue);
@@ -175,11 +178,15 @@ export class RedLock implements Lock {
   /**
    * Attempt to acquire lock on all Redis nodes
    */
-  private async attemptLockAcquisition(lockValue: string): Promise<{
+  private async attemptLockAcquisition(
+    lockValue: string,
+    startedAt: number
+  ): Promise<{
     success: boolean;
     successCount: number;
     successfulNodes: string[];
     nodeResults: NodeLockResult[];
+    validityExceeded?: Error;
   }> {
     const startTime = Date.now();
 
@@ -209,20 +216,22 @@ export class RedLock implements Lock {
     // Check if we have quorum
     const hasQuorum = successCount >= this.config.quorum;
 
-    // Calculate time spent on lock acquisition
-    const totalTime = Date.now() - startTime;
+    // Time spent on lock acquisition, on the monotonic clock
+    const elapsed = performance.now() - startedAt;
 
     // Account for clock drift - reduce effective TTL
-    const driftTime = Math.floor(this.config.ttl * this.config.clockDriftFactor) + 2;
-    const effectiveTime = totalTime + driftTime;
+    const drift = clockDriftFor(this.config.ttl, this.config.clockDriftFactor);
 
     // If acquisition took too long relative to TTL, it's not safe
-    if (effectiveTime >= this.config.ttl) {
+    if (elapsed + drift >= this.config.ttl) {
       return {
         success: false,
         successCount,
         successfulNodes: successfulResults.map(r => r.nodeId),
         nodeResults: actualResults,
+        ...(hasQuorum && {
+          validityExceeded: validityExceededError(elapsed, drift, this.config.ttl),
+        }),
       };
     }
 

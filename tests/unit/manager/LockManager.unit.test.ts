@@ -306,7 +306,7 @@ describe('LockManager', () => {
       const manager = new LockManager({ nodes: [adapter] });
 
       // Acquire a lock with very short TTL
-      await manager.acquireLock('test-key', { ttl: 1 });
+      await manager.acquireLock('test-key', { ttl: 5 });
 
       expect(manager.getStats().activeLocks).toBe(1);
 
