@@ -22,7 +22,7 @@ jobs:
         ports:
           - 127.0.0.1:6379:6379
         options: >-
-          --health-cmd "${{ matrix.server.name }}-cli ping"
+          --health-cmd "${{ matrix.server.kind }}-cli ping"
           --health-interval 2s
           --health-timeout 5s
           --health-retries 15
@@ -31,9 +31,17 @@ jobs:
       matrix:
         server:
           - name: redis
+            kind: redis
             image: redis:7-alpine
+          - name: redis-8
+            kind: redis
+            image: redis:8-alpine
           - name: valkey
+            kind: valkey
             image: valkey/valkey:8-alpine
+          - name: valkey-9
+            kind: valkey
+            image: valkey/valkey:9-alpine
         clients:
           - name: dev dependencies
             install: ''
@@ -55,7 +63,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
       with:
-        node-version: '22.x'
+        node-version: '24.x'
         cache: 'npm'
 
     - name: Install dependencies
@@ -68,9 +76,10 @@ jobs:
         CLIENTS: ${{ matrix.clients.install }}
 
     - name: Start cluster
-      run: scripts/test-cluster.sh up "$SERVER" >> "$GITHUB_ENV"
+      run: scripts/test-cluster.sh up "$SERVER" "$IMAGE" >> "$GITHUB_ENV"
       env:
-        SERVER: ${{ matrix.server.name }}
+        SERVER: ${{ matrix.server.kind }}
+        IMAGE: ${{ matrix.server.image }}
 
     - name: Test - Cluster and client options
       run: >-
