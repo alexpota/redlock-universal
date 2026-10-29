@@ -3,7 +3,12 @@ import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  releaseQuietly,
+  validityExceededError,
+} from '../utils/validity.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -109,6 +114,7 @@ export class SimpleLock implements Lock {
     if (ttl <= 0 || !Number.isInteger(ttl)) {
       throw new Error('TTL must be a positive integer');
     }
+    assertTtlAboveDrift(ttl);
 
     const retryAttempts = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
     if (retryAttempts < 0 || !Number.isInteger(retryAttempts)) {

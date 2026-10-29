@@ -5,7 +5,12 @@ import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
-import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  releaseQuietly,
+  validityExceededError,
+} from '../utils/validity.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
@@ -271,6 +276,7 @@ export class LockManager {
 
     const adapter = this.config.nodes[nodeIndex]!;
     const ttl = options.ttl ?? this.config.defaultTTL;
+    assertTtlAboveDrift(ttl);
     const retryAttempts = options.retryAttempts ?? this.config.defaultRetryAttempts;
     const retryDelay = options.retryDelay ?? this.config.defaultRetryDelay;
     const startTime = Date.now();

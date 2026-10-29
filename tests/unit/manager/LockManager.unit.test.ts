@@ -306,13 +306,13 @@ describe('LockManager', () => {
       const adapter = new MockRedisAdapter();
       const manager = new LockManager({ nodes: [adapter] });
 
-      // Acquire a lock with very short TTL
-      await manager.acquireLock('test-key', { ttl: 5 });
+      // Acquire a lock with a short TTL
+      await manager.acquireLock('test-key', { ttl: 50 });
 
       expect(manager.getStats().activeLocks).toBe(1);
 
       // Wait for lock to expire
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 60));
 
       const cleaned = await manager.cleanupExpiredLocks();
       expect(cleaned).toBe(1);

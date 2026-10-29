@@ -6,7 +6,12 @@ import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue } from '../utils/crypto.js';
-import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  releaseQuietly,
+  validityExceededError,
+} from '../utils/validity.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -42,6 +47,7 @@ export class LeanSimpleLock implements Lock {
     this.a = config.adapter;
     this.k = config.key;
     this.t = config.ttl ?? DEFAULTS.TTL;
+    assertTtlAboveDrift(this.t);
     this.r = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
     this.d = config.retryDelay ?? DEFAULTS.RETRY_DELAY;
   }

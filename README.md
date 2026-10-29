@@ -418,7 +418,7 @@ const lock = createLock({ adapter, key: 'resource', performance: 'lean' });
 const lock = createLock({ adapter, key: 'resource', performance: 'enterprise' });
 ```
 
-`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). It does not validate its configuration or check handles.
+`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). Apart from rejecting a TTL too short to ever be acquired, it does not validate its configuration or check handles.
 
 </details>
 

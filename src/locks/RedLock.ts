@@ -10,7 +10,12 @@ import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../t
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 import { emitWarningOnce } from '../utils/warnings.js';
-import { clockDriftFor, releaseQuietly, validityExceededError } from '../utils/validity.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  releaseQuietly,
+  validityExceededError,
+} from '../utils/validity.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -150,6 +155,8 @@ export class RedLock implements Lock {
     if (this.config.clockDriftFactor < 0 || this.config.clockDriftFactor >= 1) {
       throw new Error('Clock drift factor must be between 0 and 1');
     }
+
+    assertTtlAboveDrift(this.config.ttl, this.config.clockDriftFactor);
   }
 
   /**

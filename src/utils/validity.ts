@@ -24,6 +24,22 @@ export function clockDriftFor(
 }
 
 /**
+ * Reject a TTL that leaves no validity once the clock drift allowance is taken off: a lock
+ * with it could never be acquired
+ */
+export function assertTtlAboveDrift(
+  ttl: number,
+  driftFactor: number = DEFAULTS.CLOCK_DRIFT_FACTOR
+): void {
+  const drift = clockDriftFor(ttl, driftFactor);
+  if (ttl <= drift) {
+    throw new Error(
+      `TTL must be greater than its clock drift allowance: ${ttl}ms TTL, ${drift}ms drift`
+    );
+  }
+}
+
+/**
  * Error for a lock granted after its validity time ran out: the time the attempt took
  * plus the drift allowance reached the TTL
  */
