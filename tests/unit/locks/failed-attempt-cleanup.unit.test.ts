@@ -88,8 +88,9 @@ const SCENARIOS: Record<
     };
   },
   RedLock: (replies, release) => {
-    // Every node gives the same reply, so a granted attempt reaches the quorum
-    const adapters = [0, 1, 2].map(() => createNode(replies, release));
+    // One node, so the attempt is decided by its own reply; multi-node timing is tested in
+    // the RedLock unit tests
+    const adapters = [createNode(replies, release)];
     const lock = new RedLock({
       adapters,
       key: 'cleanup',
@@ -194,13 +195,14 @@ describe.each(Object.entries(SCENARIOS))('%s after a failed attempt', (_name, sc
 describe('RedLock cleanup after a failed round', () => {
   it('should release nodes that granted or failed, but not nodes that refused', async () => {
     const granted = createNode(['OK']);
-    const failed = createNode([new Error('timeout')]);
     const refused = createNode([null]);
+    const failed = createNode([new Error('timeout')]);
+    // Quorum 2 of 3: the round is decided only by the last reply, so every node has answered
     const lock = new RedLock({
-      adapters: [granted, failed, refused],
+      adapters: [granted, refused, failed],
       key: 'cleanup',
       ttl: TTL,
-      quorum: 3,
+      quorum: 2,
       retryAttempts: 0,
     });
 

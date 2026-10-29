@@ -845,26 +845,19 @@ describe('RedLock with a node that never answers', () => {
     expect((handle as LockHandle).metadata?.nodes).toEqual(['node-0', 'node-1']);
   });
 
-  it('should fail as soon as the quorum is out of reach, and release a slow node once it times out', async () => {
+  it('should fail as soon as the quorum is out of reach, and release the node still in flight at once', async () => {
     const refusing = () =>
       node(
         async () => null,
         async () => false
       );
-    // The adapter's command timeout turns a hung node into an error, later than the decision
-    const timingOut = node(
-      () =>
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2 * PROMPT_MS)),
-      never
-    );
-    const lock = redlock([refusing(), refusing(), timingOut]);
+    const stuck = hung();
+    const lock = redlock([refusing(), refusing(), stuck]);
 
     const outcome = await within(lock.acquire().catch((error: unknown) => error));
-    expect(outcome).toBeInstanceOf(LockAcquisitionError);
-    expect(timingOut.delIfMatch).not.toHaveBeenCalled();
 
-    await new Promise(resolve => setTimeout(resolve, 3 * PROMPT_MS));
-    expect(timingOut.delIfMatch).toHaveBeenCalledTimes(1);
+    expect(outcome).toBeInstanceOf(LockAcquisitionError);
+    expect(stuck.delIfMatch).toHaveBeenCalledTimes(1);
   });
 
   it('should extend as soon as a quorum has extended', async () => {
@@ -887,5 +880,53 @@ describe('RedLock with a node that never answers', () => {
     const lock = redlock([refusing(), refusing(), hung()]);
 
     await expect(within(lock.extend(heldHandle(), 10_000))).resolves.toBe(false);
+  });
+});
+
+describe('RedLock retry after a round that failed early', () => {
+  const SLOW_REPLY_MS = 60;
+  const RETRY_DELAY_MS = 40;
+
+  /** Commands take effect when sent and reply later, like one connection to a slow server */
+  const slowNode = (): RedisAdapter => {
+    let held: string | null = null;
+    const reply = <T>(value: T) =>
+      new Promise<T>(resolve => setTimeout(() => resolve(value), SLOW_REPLY_MS));
+    return {
+      setNX: vi.fn((_key: string, value: string) => {
+        const granted = held === null;
+        if (granted) held = value;
+        return reply(granted ? 'OK' : null);
+      }),
+      delIfMatch: vi.fn((_key: string, value: string) => {
+        const matched = held === value;
+        if (matched) held = null;
+        return reply(matched);
+      }),
+    } as unknown as RedisAdapter;
+  };
+  const fastNode = (replies: Array<'OK' | null>): RedisAdapter => {
+    let call = 0;
+    return {
+      setNX: vi.fn(async () => replies[Math.min(call++, replies.length - 1)]!),
+      delIfMatch: vi.fn().mockResolvedValue(false),
+    } as unknown as RedisAdapter;
+  };
+
+  it('should release nodes still in flight at once, so the retry is not blocked by its own keys', async () => {
+    const slow = [slowNode(), slowNode()];
+    const lock = new RedLock({
+      adapters: [fastNode([null]), fastNode([null]), fastNode([null, 'OK']), ...slow],
+      key: generateTestKey('retry'),
+      ttl: 10_000,
+      quorum: 3,
+      retryAttempts: 1,
+      retryDelay: RETRY_DELAY_MS,
+    });
+
+    const handle = await lock.acquire();
+
+    expect(handle.metadata?.attempts).toBe(2);
+    expect(handle.metadata?.nodes).toEqual(['node-2', 'node-3', 'node-4']);
   });
 });

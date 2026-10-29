@@ -190,7 +190,7 @@ export class RedLock implements Lock {
           );
 
         // Release what this attempt may have set, without waiting for slow nodes
-        this.releasePartialLocks(result.replies, lockValue);
+        this.releasePartialLocks(result.nodeResults, lockValue);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR);
       }
@@ -218,8 +218,8 @@ export class RedLock implements Lock {
     success: boolean;
     successCount: number;
     successfulNodes: string[];
-    /** Every node's reply, including replies that arrive after the outcome was decided */
-    replies: ReadonlyArray<Promise<NodeLockResult>>;
+    /** Each node's reply when the outcome was decided; undefined while it is still in flight */
+    nodeResults: ReadonlyArray<NodeLockResult | undefined>;
     validityExceeded?: Error;
   }> {
     const startTime = Date.now();
@@ -258,7 +258,7 @@ export class RedLock implements Lock {
         success: false,
         successCount,
         successfulNodes: successfulResults.map(r => r.nodeId),
-        replies,
+        nodeResults,
         ...(hasQuorum && {
           validityExceeded: validityExceededError(elapsed, drift, this.config.ttl),
         }),
@@ -269,7 +269,7 @@ export class RedLock implements Lock {
       success: hasQuorum,
       successCount,
       successfulNodes: successfulResults.map(r => r.nodeId),
-      replies,
+      nodeResults,
     };
   }
 
@@ -306,21 +306,20 @@ export class RedLock implements Lock {
   }
 
   /**
-   * Release this attempt's value on every node whose reply shows it set the key or may have
-   * (the command failed or timed out), including replies that arrive after the outcome was
-   * decided, without waiting. Nodes that answered "not set" are skipped
+   * Release this attempt's value, without waiting, on every node that set it or may have:
+   * nodes that granted, failed, timed out or have not replied yet. A node still in flight gets
+   * the release right away; it travels behind the SET on the same connection, so it runs after
+   * it, before a retry's SET. Nodes that answered "not set" are skipped
    */
   private releasePartialLocks(
-    replies: ReadonlyArray<Promise<NodeLockResult>>,
+    nodeResults: ReadonlyArray<NodeLockResult | undefined>,
     lockValue: string
   ): void {
-    for (const reply of replies) {
-      void reply.then(result => {
-        if (result.success || result.error) {
-          releaseQuietly(result.adapter, this.config.key, lockValue);
-        }
-      });
-    }
+    nodeResults.forEach((result, index) => {
+      if (!result || result.success || result.error) {
+        releaseQuietly(this.adapters[index]!, this.config.key, lockValue);
+      }
+    });
   }
 
   /**
