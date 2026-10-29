@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
+import { LockManager } from '../../../src/manager/LockManager.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
 import type { RedLockConfig } from '../../../src/types/locks.js';
 import {
@@ -723,5 +724,79 @@ describe('RedLock', () => {
         expect(remainingLocks).toBe(0);
       });
     });
+  });
+});
+
+describe('RedLock minority quorum warning', () => {
+  const warnedFlag = Symbol.for('redlock-universal.warned.REDLOCK_UNIVERSAL_MINORITY_QUORUM');
+  const registry = globalThis as Record<symbol, unknown>;
+  const nodes = (count: number): MockRedisAdapter[] =>
+    Array.from({ length: count }, (_, index) => new MockRedisAdapter(`redis-${index + 1}`));
+  let emitWarning: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    delete registry[warnedFlag];
+    emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    emitWarning.mockRestore();
+    delete registry[warnedFlag];
+  });
+
+  it.each([
+    [1, 1, false],
+    [2, 1, true],
+    [2, 2, false],
+    [3, 1, true],
+    [3, 2, false],
+    [4, 2, true],
+    [4, 3, false],
+    [5, 2, true],
+    [5, 3, false],
+  ])('with %i nodes and quorum %i warns: %s', (count, quorum, warns) => {
+    new RedLock({ adapters: nodes(count), key: generateTestKey('quorum'), quorum });
+
+    expect(emitWarning).toHaveBeenCalledTimes(warns ? 1 : 0);
+  });
+
+  it('should warn once per process with a stable code', () => {
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+    new RedLock({ adapters: nodes(4), key: generateTestKey('quorum'), quorum: 2 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('quorum 1 of 3'),
+      expect.objectContaining({ code: 'REDLOCK_UNIVERSAL_MINORITY_QUORUM' })
+    );
+  });
+
+  it('should also send the warning to the logger', () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1, logger });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('quorum 1 of 3'),
+      expect.objectContaining({ quorum: 1, nodes: 3 })
+    );
+  });
+
+  it('should warn once when the module is loaded twice in one process', async () => {
+    vi.resetModules();
+    const { RedLock: SecondCopy } = await import('../../../src/locks/RedLock.js');
+
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+    new SecondCopy({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it('should warn for RedLocks created by LockManager', () => {
+    const manager = new LockManager({ nodes: nodes(3) });
+
+    manager.createRedLock(generateTestKey('quorum'), { quorum: 1 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
   });
 });

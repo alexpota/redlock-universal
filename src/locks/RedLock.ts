@@ -9,6 +9,7 @@ import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
+import { emitWarningOnce } from '../utils/warnings.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -18,6 +19,7 @@ const REDIS_OK_RESPONSE = 'OK';
 const DISTRIBUTED_RETRY_MULTIPLIER = 2;
 const QUORUM_DIVISOR = 2;
 const QUORUM_OFFSET = 1;
+const MINORITY_QUORUM_WARNING_CODE = 'REDLOCK_UNIVERSAL_MINORITY_QUORUM';
 
 /**
  * Result of attempting to acquire a lock on a single Redis node
@@ -58,6 +60,27 @@ export class RedLock implements Lock {
     this.config = config.logger ? { ...baseConfig, logger: config.logger } : baseConfig;
 
     this.validateConfig();
+    this.warnIfMinorityQuorum();
+  }
+
+  /**
+   * Warn once per process when the quorum is not a majority: two clients can then
+   * hold the same lock on disjoint sets of nodes
+   */
+  private warnIfMinorityQuorum(): void {
+    const { quorum, adapters, key, logger } = this.config;
+    if (quorum > adapters.length / QUORUM_DIVISOR) {
+      return;
+    }
+
+    const majority = Math.floor(adapters.length / QUORUM_DIVISOR) + QUORUM_OFFSET;
+    const message =
+      `RedLock quorum ${quorum} of ${adapters.length} nodes is not a majority, so two clients ` +
+      `can hold the same lock at once. Use a quorum of at least ${majority}.`;
+
+    if (emitWarningOnce(MINORITY_QUORUM_WARNING_CODE, message)) {
+      logger?.warn(message, { key, quorum, nodes: adapters.length });
+    }
   }
 
   /**
