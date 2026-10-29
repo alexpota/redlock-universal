@@ -11,6 +11,7 @@ import {
   LockManager,
   NodeRedisAdapter,
 } from '../../../src/index.js';
+import { BATCH_ACQUIRE_SCRIPT } from '../../../src/adapters/BaseAdapter.js';
 import type { RedisAdapter } from '../../../src/types/adapters.js';
 import { delay, generateTestKey, getRedisUrl, REDIS_CONFIG } from '../../shared/constants.js';
 import { startReplyDelayProxy, type ReplyDelayProxy } from '../../shared/reply-delay-proxy.js';
@@ -151,8 +152,10 @@ describe.each(Object.entries(CLIENTS))('%s attempt that times out', (_client, co
     'removes the keys a timed-out %s attempt set, even with an empty script cache',
     async (_producer, produce) => {
       const holder = await timingOut(produce, generateTestKey('timed-out-attempt'));
-      // As after a restart or failover: the release script is not cached on the server
+      // As after a restart or failover: the release script is not cached on the server. The
+      // batch script is loaded again, so a batch attempt runs and sets its keys
       await reader(0).script('FLUSH');
+      await reader(0).script('LOAD', BATCH_ACQUIRE_SCRIPT);
 
       await expect(holder.acquire()).rejects.toBeInstanceOf(LockAcquisitionError);
       await delay(SETTLE_MS);
