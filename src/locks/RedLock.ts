@@ -68,8 +68,6 @@ interface NodeLockResult {
   readonly nodeId: string;
   /** Error if acquisition failed */
   readonly error?: Error;
-  /** Time taken for this operation in milliseconds */
-  readonly operationTime: number;
 }
 
 /**
@@ -225,8 +223,6 @@ export class RedLock implements Lock {
     nodeResults: ReadonlyArray<NodeLockResult | undefined>;
     validityExceeded?: Error;
   }> {
-    const startTime = Date.now();
-
     // Try to acquire lock on all nodes simultaneously; stop waiting once the outcome is decided
     const replies = this.adapters.map((adapter, index) =>
       this.acquireOnSingleNode(adapter, lockValue, `node-${index}`)
@@ -239,7 +235,6 @@ export class RedLock implements Lock {
           success: false,
           adapter: this.adapters[index]!,
           nodeId: `node-${index}`,
-          operationTime: Date.now() - startTime,
         }
     );
 
@@ -284,26 +279,20 @@ export class RedLock implements Lock {
     lockValue: string,
     nodeId: string
   ): Promise<NodeLockResult> {
-    const startTime = Date.now();
-
     try {
       const result = await adapter.setNX(this.config.key, lockValue, this.config.ttl);
-      const operationTime = Date.now() - startTime;
 
       return {
         success: result === REDIS_OK_RESPONSE,
         adapter,
         nodeId,
-        operationTime,
       };
     } catch (error) {
-      const operationTime = Date.now() - startTime;
       return {
         success: false,
         adapter,
         nodeId,
         error: error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR),
-        operationTime,
       };
     }
   }
@@ -371,7 +360,7 @@ export class RedLock implements Lock {
           adapter.extendIfMatch(handle.key, handle.value, ttl).catch(() => false)
         ),
         this.config.quorum,
-        extended => extended
+        extended => extended === true
       );
       const successfulExtensions = extendResults.filter(extended => extended === true).length;
 

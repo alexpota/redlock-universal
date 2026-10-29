@@ -26,7 +26,10 @@ export const DEFAULTS = {
   /** Default monitoring interval in milliseconds (1 minute) */
   MONITORING_INTERVAL: 60_000,
 
-  /** Default health check interval in milliseconds (30 seconds) */
+  /**
+   * @deprecated No longer used: a lock's health follows the outcome of its own commands.
+   * Kept for compatibility
+   */
   HEALTH_CHECK_INTERVAL: 30_000,
 
   /** Circuit breaker failure threshold */

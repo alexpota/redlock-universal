@@ -10,6 +10,7 @@ describe('Constants', () => {
       expect(DEFAULTS.REDIS_TIMEOUT).toBe(5_000);
       expect(DEFAULTS.CLOCK_DRIFT_FACTOR).toBe(0.01);
       expect(DEFAULTS.MONITORING_INTERVAL).toBe(60_000);
+      // Deprecated, but kept with its value for compatibility
       expect(DEFAULTS.HEALTH_CHECK_INTERVAL).toBe(30_000);
       expect(DEFAULTS.CIRCUIT_BREAKER_THRESHOLD).toBe(5);
       expect(DEFAULTS.CIRCUIT_BREAKER_TIMEOUT).toBe(60_000);

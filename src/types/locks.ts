@@ -44,7 +44,10 @@ export interface LockMetadata {
   /** Time spent acquiring the lock (ms) */
   readonly acquisitionTime: number;
 
-  /** Which Redis instances participated (for distributed locks) */
+  /**
+   * Nodes that granted the lock before acquire() returned (distributed locks). A node that
+   * grants after the quorum outcome was decided is not listed
+   */
   readonly nodes?: string[];
 
   /** Acquisition strategy used */

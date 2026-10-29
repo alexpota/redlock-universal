@@ -34,8 +34,7 @@ LOCK_HELD_ERROR.stack = '';
  * - No health checks by default (saves ~50KB)
  * - Pre-allocated error objects (saves stack trace overhead)
  * - Minimal property storage with short names
- * - No closures or callbacks
- * - Pooled-buffer lock values from crypto
+ * - Lock values from crypto.randomUUID
  */
 export class LeanSimpleLock implements Lock {
   private readonly a: RedisAdapter;
