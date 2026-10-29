@@ -307,6 +307,26 @@ describe('NodeRedisAdapter disconnect across node-redis versions', () => {
     expect(client.disconnect).not.toHaveBeenCalled();
   });
 
+  it('should wait for destroy() when it returns a promise', async () => {
+    let destroyed = false;
+    const client = {
+      destroy: vi.fn(
+        () =>
+          new Promise<void>(resolve =>
+            setTimeout(() => {
+              destroyed = true;
+              resolve();
+            }, 10)
+          )
+      ),
+      isReady: true,
+    };
+
+    await new NodeRedisAdapter(client).disconnect();
+
+    expect(destroyed).toBe(true);
+  });
+
   it('should call disconnect() on node-redis 4, which has no destroy()', async () => {
     const client = { disconnect: vi.fn().mockResolvedValue(undefined), isReady: true };
 

@@ -262,7 +262,7 @@ export class NodeRedisAdapter extends BaseAdapter {
       this.scriptSHAs.clear();
       // node-redis 5 deprecates disconnect() in favour of destroy(); 4.x only has disconnect()
       if (typeof this.client.destroy === 'function') {
-        this.client.destroy();
+        await this.client.destroy();
       } else {
         await this.client.disconnect();
       }
