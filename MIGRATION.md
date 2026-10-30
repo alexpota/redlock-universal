@@ -1,6 +1,6 @@
 # Migrating from node-redlock
 
-How the API of node-redlock (the [`redlock`](https://www.npmjs.com/package/redlock) package, version 5) maps to redlock-universal.
+How the API of node-redlock (the [`redlock`](https://www.npmjs.com/package/redlock) package, version 5) maps to redlock-universal. The same mapping applies to [`@sesamecare-oss/redlock`](https://www.npmjs.com/package/@sesamecare-oss/redlock), the TypeScript fork with node-redlock 5's API.
 
 ## What changes
 
