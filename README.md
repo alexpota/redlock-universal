@@ -14,9 +14,12 @@ Distributed locks for Node.js on the Redis or Valkey you already run, with the c
 
 **node-redis** &bull; **ioredis** &bull; **Valkey GLIDE**
 
-Requires Node.js 22 or later. CI runs the test suite on Node.js 22, 24 and 26 with node-redis and ioredis against Redis 7 and 8 and Valkey 8 and 9, the Valkey GLIDE adapter tests against Valkey 8 and 9, and the cluster tests with all three clients against Redis 7 and 8 and Valkey 8 and 9 clusters.
+- **Atomic multi-key locks:** `LockManager.acquireBatch()` and `usingBatch()` take several keys on one server, all of them or none.
+- **Redis Cluster:** works with the Cluster clients of ioredis, node-redis and Valkey GLIDE.
+- <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS:** [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) adds decorators and dependency injection.
+- **Checked in 0.8.10:** grants that arrive after the lock's validity time are refused, and a fault-injection test of 240,000 lock attempts found no overlapping holders ([results](https://github.com/alexpota/redlock-universal/pull/152)).
 
-> <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
+Requires Node.js 22 or later. CI runs the test suite on Node.js 22, 24 and 26 with node-redis and ioredis against Redis 7 and 8 and Valkey 8 and 9, the Valkey GLIDE adapter tests against Valkey 8 and 9, and the cluster tests with all three clients against Redis 7 and 8 and Valkey 8 and 9 clusters.
 
 ## Quick Start
 
@@ -217,6 +220,8 @@ import { GlideClusterClient } from '@valkey/valkey-glide';
 const cluster = await GlideClusterClient.createClient({ addresses: [{ host: 'node-1', port: 6379 }] });
 const adapter = new GlideAdapter(cluster);
 ```
+
+The Valkey GLIDE adapter is `GlideAdapter`; there is no `ValkeyGlideAdapter`.
 
 On a cluster, the keys passed to `acquireBatch()` or `usingBatch()` are written by one script, so they must hash to one slot. Give them a shared hash tag, such as `{order:42}:payment` and `{order:42}:stock`.
 
