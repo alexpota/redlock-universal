@@ -142,13 +142,6 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Install ${{ matrix.logger }}
-      run: npm install --no-save ${{ matrix.logger }}
-
-    - name: Install pino-pretty (for Pino)
-      if: matrix.logger == 'pino'
-      run: npm install --no-save pino-pretty
-
     - name: Build
       run: npm run build
 
