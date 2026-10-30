@@ -7,7 +7,7 @@
 
 import * as winston from 'winston';
 import { createClient } from 'redis';
-import { createLock, NodeRedisAdapter } from '../src/index.js';
+import { createLock, NodeRedisAdapter } from 'redlock-universal';
 
 async function main() {
   // Create Winston logger
