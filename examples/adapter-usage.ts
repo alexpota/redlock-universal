@@ -1,5 +1,4 @@
 // Examples showing how Redis adapter pattern should work
-// This file demonstrates the ideal API we want to achieve
 
 import { createClient as createNodeRedisClient } from 'redis';
 import { Redis } from 'ioredis';
