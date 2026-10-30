@@ -626,6 +626,8 @@ const handle = await redlock.acquire();
 await redlock.release(handle);
 ```
 
+The [migration guide](MIGRATION.md) maps the rest of the API, the settings and the errors.
+
 </details>
 
 <details>
@@ -662,6 +664,7 @@ With the `mutex:` prefix, both libraries use the same Redis key, so they exclude
 ## Links
 
 - [Safety Guide](./SAFETY.md)
+- [Migrating from node-redlock](./MIGRATION.md)
 - [Examples](https://github.com/alexpota/redlock-universal/tree/main/examples)
 - [Valkey Setup Guide](./VALKEY.md)
 - [Redis Cluster Examples](./examples/redis-cluster-usage.ts)

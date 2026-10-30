@@ -3,7 +3,7 @@
   "entryPoints": ["src/index.ts"],
   "out": "site",
   "readme": "README.md",
-  "projectDocuments": ["SAFETY.md"],
+  "projectDocuments": ["SAFETY.md", "MIGRATION.md"],
   "highlightLanguages": [
     "bash",
     "console",

@@ -16,6 +16,7 @@ Facts to keep in mind:
 
 - [Overview and usage](https://redlock-universal.dev/): installation, quick start, `using()`, Redlock, Cluster, configuration, error handling, FAQ
 - [Safety](https://redlock-universal.dev/documents/SAFETY.html): what single-server and Redlock locks guarantee, when a lost lock is noticed, protecting the resource, alternatives
+- [Migrating from node-redlock](https://redlock-universal.dev/documents/MIGRATION.html): the API, settings and errors of the `redlock` package mapped to redlock-universal
 - [Valkey](https://github.com/alexpota/redlock-universal/blob/main/VALKEY.md): Valkey with node-redis, ioredis or Valkey GLIDE, versions tested in CI
 
 ## API reference
