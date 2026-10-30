@@ -71,7 +71,7 @@ jobs:
 
     - name: Install client versions
       if: matrix.clients.install != ''
-      run: npm install --no-save $CLIENTS
+      run: npm install --no-save --ignore-scripts $CLIENTS
       env:
         CLIENTS: ${{ matrix.clients.install }}
 
