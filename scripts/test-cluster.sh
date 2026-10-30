@@ -4,7 +4,7 @@
 # published on 127.0.0.1 only.
 #
 # Usage:
-#   scripts/test-cluster.sh up [redis|valkey]   # prints REDIS_CLUSTER_NODES=...
+#   scripts/test-cluster.sh up [redis|valkey] [image]   # prints REDIS_CLUSTER_NODES=...
 #   REDIS_CLUSTER_NODES=127.0.0.1:7101,127.0.0.1:7102,127.0.0.1:7103 \
 #     npx vitest --run tests/integration/cluster
 #   scripts/test-cluster.sh down
@@ -30,11 +30,12 @@ ready() {
   done
 }
 
+# The image defaults to redis:7-alpine or valkey/valkey:8-alpine
 start() {
-  local server=$1 image
+  local server=$1 image=$2
   case "$server" in
-    redis) image=redis:7-alpine ;;
-    valkey) image=valkey/valkey:8-alpine ;;
+    redis) image=${image:-redis:7-alpine} ;;
+    valkey) image=${image:-valkey/valkey:8-alpine} ;;
     *)
       echo "Unknown server '$server' (expected redis or valkey)" >&2
       exit 1
@@ -77,10 +78,10 @@ start() {
 }
 
 case "${1:-}" in
-  up) start "${2:-redis}" ;;
+  up) start "${2:-redis}" "${3:-}" ;;
   down) stop ;;
   *)
-    echo "Usage: $0 up [redis|valkey] | down" >&2
+    echo "Usage: $0 up [redis|valkey] [image] | down" >&2
     exit 1
     ;;
 esac
