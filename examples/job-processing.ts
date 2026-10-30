@@ -41,12 +41,12 @@ async function getJobItems(jobId: string): Promise<JobItem[]> {
 }
 
 async function processJobItem(item: JobItem): Promise<void> {
-  // Simulate processing different types of items
+  // Simulated processing time per item type, in milliseconds
   const processingTime = {
-    email: 500, // 0.5 seconds
-    report: 2000, // 2 seconds
-    export: 3000, // 3 seconds
-    analysis: 5000, // 5 seconds
+    email: 5,
+    report: 20,
+    export: 30,
+    analysis: 50,
   };
 
   console.log(`  ⚙️  Processing ${item.type} ${item.id}`);
@@ -74,7 +74,7 @@ async function jobProcessingWithProgress() {
   const jobLock = createLock({
     adapter: new IoredisAdapter(client),
     key: `job-processing:${jobId}`,
-    ttl: 120000, // 2 minutes initial TTL (will auto-extend)
+    ttl: 120000, // 2 minutes; using() extends it if the job runs longer
   });
 
   try {
