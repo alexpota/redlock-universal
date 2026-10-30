@@ -21,7 +21,7 @@ While the server keeps the key, only one client holds the lock. The key can disa
 - **The server restarts without persistence**, or with the default `appendfsync everysec`, which can lose the last second of writes, or it restores an older snapshot. Recent locks are gone.
 - **Memory runs out.** Under any eviction policy other than `noeviction`, the server can evict lock keys, because they have a TTL. Some managed services default to such a policy: the default ElastiCache parameter group uses `volatile-lru`.
 - **The connection drops.** A client cut off from the server keeps running until its next extension fails.
-- **The reply to `acquire()` arrives late.** A single-instance `acquire()` does not compare the time it took with the TTL. A command can take up to the 5-second command timeout, so with a TTL close to that, `acquire()` can return a handle for a lock that has already expired. Keep the TTL well above the command timeout.
+- **The reply to `acquire()` arrives late.** `acquire()` dates the lock from when its winning attempt was sent. If that attempt took so long that the time plus the clock drift allowance (1% of the TTL plus 2 ms) reaches the TTL, it releases the grant and retries, or throws `LockAcquisitionError`. A reply can take up to the command timeout (5 seconds by default), so with a TTL close to that, slow replies turn into failed acquisitions. Keep the TTL well above the command timeout.
 
 ## Redlock
 
@@ -36,7 +36,7 @@ What it does not add: Redlock is not a consensus protocol. Its safety rests on a
 - a server that restarts either keeps its data (AOF with `appendfsync always`) or stays down for longer than the TTL;
 - the servers are independent primaries, not replicas of one another.
 
-If one of these fails, two clients can hold the lock at the same time. The `quorum` option accepts any value from 1 to the number of servers. A quorum below a majority, for example `quorum: 1` with three servers, lets two clients hold the lock even when nothing fails. Keep the default.
+If one of these fails, two clients can hold the lock at the same time. The `quorum` option accepts any value from 1 to the number of servers. A quorum below a majority, for example `quorum: 1` with three servers, lets two clients hold the lock even when nothing fails; `RedLock` emits a one-time process warning (`REDLOCK_UNIVERSAL_MINORITY_QUORUM`) for it. Keep the default.
 
 ## When a lost lock is noticed
 
@@ -87,6 +87,6 @@ Make the write fail when someone else changed the data after you read it:
 
 - Redis: [Distributed locks with Redis](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
 - Martin Kleppmann: [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
-- Salvatore Sanfilippo: [Is Redlock safe?](http://antirez.com/news/101)
+- Salvatore Sanfilippo: [Is Redlock safe?](https://antirez.com/news/101)
 - Valkey: [Replication](https://valkey.io/topics/replication/)
 - Amazon ElastiCache: [Durability options](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Durability.Options.html)

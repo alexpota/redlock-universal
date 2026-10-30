@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { SYMBOL_KEY_PREFIX } from '../utils/symbol-keys.js';
 
 /** Matches the NOSCRIPT server reply and GLIDE's NoScriptError */
 const NO_SCRIPT_PATTERN = /noscript/i;
@@ -13,6 +14,24 @@ export interface ScriptCalls {
   readonly evalSha: (sha: string) => Promise<unknown>;
   /** Sends the script itself (EVAL), which also caches it on that node */
   readonly evalScript: () => Promise<unknown>;
+}
+
+/**
+ * Key of an optional adapter method that releases a lock with EVAL, sending the script itself,
+ * so it works whatever the server's script cache holds (first use, restart, failover, SCRIPT
+ * FLUSH). Best-effort cleanup uses it when an adapter has it, and delIfMatch otherwise.
+ * @internal
+ */
+export const RELEASE_WITH_SCRIPT_BODY: unique symbol = Symbol.for(
+  `${SYMBOL_KEY_PREFIX}releaseWithScriptBody`
+);
+
+/**
+ * Adapter that can release a lock by sending the release script itself
+ * @internal
+ */
+export interface ReleaseWithScriptBody {
+  [RELEASE_WITH_SCRIPT_BODY](key: string, value: string): Promise<boolean>;
 }
 
 /**

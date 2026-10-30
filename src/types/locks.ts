@@ -20,7 +20,11 @@ export interface LockHandle {
   /** Lock value (for safe release) */
   readonly value: string;
 
-  /** Timestamp when lock was acquired */
+  /**
+   * When the winning attempt was sent (Unix epoch ms). The server starts the TTL when it
+   * runs the command, so the lock is valid until acquiredAt + ttl minus the clock drift
+   * allowance, measured on this client's clock
+   */
   readonly acquiredAt: number;
 
   /** Lock TTL in milliseconds */
@@ -40,7 +44,10 @@ export interface LockMetadata {
   /** Time spent acquiring the lock (ms) */
   readonly acquisitionTime: number;
 
-  /** Which Redis instances participated (for distributed locks) */
+  /**
+   * Nodes that granted the lock before acquire() returned (distributed locks). A node that
+   * grants after the quorum outcome was decided is not listed
+   */
   readonly nodes?: string[];
 
   /** Acquisition strategy used */
@@ -55,7 +62,10 @@ export interface CircuitBreakerConfig {
   readonly failureThreshold?: number;
   /** Time in ms before probing after circuit opens (default: 60000) */
   readonly resetTimeout?: number;
-  /** Health check interval in ms (default: 30000) */
+  /**
+   * @deprecated Has no effect: health follows the outcome of the lock's own commands, with no
+   * separate PING. The value is still validated
+   */
   readonly healthCheckInterval?: number;
 }
 

@@ -93,8 +93,10 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
   let isAborted = false;
   let isFinished = false;
   let abortError: Error | undefined;
-  // The earliest acquisition expires first
-  let lastExtensionTime = Math.min(...handles.map(h => h.acquiredAt));
+  // The earliest acquisition expires first. Scheduling runs on the monotonic clock, so
+  // that send time is carried over from the wall clock once, here
+  const earliestAcquiredAt = Math.min(...handles.map(h => h.acquiredAt));
+  let lastExtensionTime = performance.now() - (Date.now() - earliestAcquiredAt);
 
   const threshold = Math.floor(ttl * extensionThresholdRatio);
   // Extensions due within this window run at once; capping it at the threshold keeps
@@ -117,7 +119,7 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
       clearTimeout(extensionTimer);
     }
 
-    const now = Date.now();
+    const now = performance.now();
     const timeUntilExpiry = lastExtensionTime + ttl - now;
     const timeUntilExtension = timeUntilExpiry - threshold;
 
@@ -131,7 +133,7 @@ export async function executeWithAutoExtension<T>(config: AutoExtensionConfig<T>
   const attemptExtension = async (): Promise<void> => {
     if (isAborted) return;
 
-    const attemptStartedAt = Date.now();
+    const attemptStartedAt = performance.now();
 
     const extensionPromises = locks.map(async (lock, index): Promise<IndividualExtensionResult> => {
       try {

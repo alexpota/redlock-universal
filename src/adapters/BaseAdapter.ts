@@ -7,6 +7,7 @@ import type {
 } from '../types/adapters.js';
 import type { Logger } from '../monitoring/Logger.js';
 import { DEFAULTS } from '../constants.js';
+import { executeScript, RELEASE_WITH_SCRIPT_BODY, type ScriptCalls } from './script-execution.js';
 
 // Validation limits
 const MAX_KEY_LENGTH = 512;
@@ -248,6 +249,50 @@ export abstract class BaseAdapter implements RedisAdapter {
         clearTimeout(timeoutHandle);
       }
     }
+  }
+
+  /**
+   * Client calls that run one Lua script. The built-in adapters provide them; an adapter
+   * without them releases failed attempts with delIfMatch instead
+   * @internal
+   */
+  protected scriptCalls?(
+    scriptBody: string,
+    keys: string[],
+    args: (string | number)[]
+  ): ScriptCalls;
+
+  /**
+   * Run a Lua script by its SHA, sending the script itself when the node does not have it
+   */
+  protected async _executeScript<T>(
+    scriptCacheKey: string,
+    scriptBody: string,
+    keys: string[],
+    args: (string | number)[]
+  ): Promise<T> {
+    if (!this.scriptCalls) {
+      throw new Error('This adapter does not provide script calls');
+    }
+    return executeScript<T>(
+      this.scriptSHAs,
+      scriptCacheKey,
+      scriptBody,
+      this.scriptCalls(scriptBody, keys, args)
+    );
+  }
+
+  /**
+   * Release with EVAL, sending the script itself, so it does not depend on the server's
+   * script cache. Used for best-effort cleanup after an attempt that failed or timed out
+   * @internal
+   */
+  async [RELEASE_WITH_SCRIPT_BODY](key: string, value: string): Promise<boolean> {
+    if (!this.scriptCalls) {
+      return this.delIfMatch(key, value);
+    }
+    const calls = this.scriptCalls(DELETE_IF_MATCH_SCRIPT, [this.prefixKey(key)], [value]);
+    return (await calls.evalScript()) === REDIS_SCRIPT_SUCCESS;
   }
 
   /**

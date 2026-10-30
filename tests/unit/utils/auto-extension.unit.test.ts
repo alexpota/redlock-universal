@@ -112,6 +112,30 @@ describe('executeWithAutoExtension scheduling', () => {
     await run;
   });
 
+  it('keeps its schedule when the wall clock steps back during an extension', async () => {
+    const STEP_BACK_MS = 10_000;
+    const { lock, adapter } = createLock(async () => {
+      vi.setSystemTime(Date.now() - STEP_BACK_MS);
+      return EXTENDED;
+    });
+    const { routine, finish } = pendingRoutine();
+
+    const run = executeWithAutoExtension({
+      locks: [lock],
+      handles: [createHandle(Date.now())],
+      ttl: TTL,
+      routine,
+    });
+
+    await vi.advanceTimersByTimeAsync(EXTENSION_POINT_MS);
+    expect(adapter.atomicExtend).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(EXTENSION_POINT_MS);
+    expect(adapter.atomicExtend).toHaveBeenCalledTimes(2);
+
+    finish();
+    await run;
+  });
+
   it('leaves no timer behind when the routine returns during an extension', async () => {
     let markExtending!: () => void;
     const extending = new Promise<void>(resolve => {

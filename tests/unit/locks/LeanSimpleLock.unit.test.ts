@@ -51,6 +51,17 @@ describe('LeanSimpleLock Unit Tests', () => {
   });
 
   describe('acquire', () => {
+    it('should use a cryptographically random lock value', async () => {
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+      const mathRandom = vi.spyOn(Math, 'random');
+
+      const handle = await lock.acquire();
+
+      expect(handle.value).toMatch(/^[0-9a-f]{32}$/);
+      expect(mathRandom).not.toHaveBeenCalled();
+      mathRandom.mockRestore();
+    });
+
     it('should successfully acquire lock on first attempt', async () => {
       mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
 
@@ -104,14 +115,6 @@ describe('LeanSimpleLock Unit Tests', () => {
       const handle2 = await lock.acquire();
 
       expect(handle1.value).not.toBe(handle2.value);
-    });
-
-    it('should include process.pid in lock value for uniqueness', async () => {
-      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
-
-      const handle = await lock.acquire();
-
-      expect(handle.value).toContain(process.pid.toString());
     });
   });
 

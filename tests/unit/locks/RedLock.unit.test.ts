@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RedLock } from '../../../src/locks/RedLock.js';
 import { LockAcquisitionError } from '../../../src/types/errors.js';
+import { LockManager } from '../../../src/manager/LockManager.js';
+import { warningFlag } from '../../../src/utils/warnings.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
-import type { RedLockConfig } from '../../../src/types/locks.js';
+import type { LockHandle, RedLockConfig } from '../../../src/types/locks.js';
 import {
   generateTestKey,
   TEST_STRINGS,
@@ -723,5 +725,212 @@ describe('RedLock', () => {
         expect(remainingLocks).toBe(0);
       });
     });
+  });
+});
+
+describe('RedLock minority quorum warning', () => {
+  const warnedFlag = warningFlag('REDLOCK_UNIVERSAL_MINORITY_QUORUM');
+  const registry = globalThis as Record<symbol, unknown>;
+  const nodes = (count: number): RedisAdapter[] =>
+    Array.from(
+      { length: count },
+      (_, index) => new MockRedisAdapter(`redis-${index + 1}`) as unknown as RedisAdapter
+    );
+  let emitWarning: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    delete registry[warnedFlag];
+    emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    emitWarning.mockRestore();
+    delete registry[warnedFlag];
+  });
+
+  it.each([
+    [1, 1, false],
+    [2, 1, true],
+    [2, 2, false],
+    [3, 1, true],
+    [3, 2, false],
+    [4, 2, true],
+    [4, 3, false],
+    [5, 2, true],
+    [5, 3, false],
+  ])('with %i nodes and quorum %i warns: %s', (count, quorum, warns) => {
+    new RedLock({ adapters: nodes(count), key: generateTestKey('quorum'), quorum });
+
+    expect(emitWarning).toHaveBeenCalledTimes(warns ? 1 : 0);
+  });
+
+  it('should warn once per process with a stable code', () => {
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+    new RedLock({ adapters: nodes(4), key: generateTestKey('quorum'), quorum: 2 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('quorum 1 of 3'),
+      expect.objectContaining({ code: 'REDLOCK_UNIVERSAL_MINORITY_QUORUM' })
+    );
+  });
+
+  it('should also send the warning to the logger', () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1, logger });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('quorum 1 of 3'),
+      expect.objectContaining({ quorum: 1, nodes: 3 })
+    );
+  });
+
+  it('should warn once when the module is loaded twice in one process', async () => {
+    vi.resetModules();
+    const { RedLock: SecondCopy } = await import('../../../src/locks/RedLock.js');
+
+    new RedLock({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+    new SecondCopy({ adapters: nodes(3), key: generateTestKey('quorum'), quorum: 1 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+  });
+
+  it('should warn for RedLocks created by LockManager', () => {
+    const manager = new LockManager({ nodes: nodes(3) });
+
+    manager.createRedLock(generateTestKey('quorum'), { quorum: 1 });
+
+    expect(emitWarning).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RedLock with a node that never answers', () => {
+  /** Far below the 5 s command timeout: the outcome must not wait for the hung node */
+  const PROMPT_MS = 100;
+  const never = <T>(): Promise<T> => new Promise<T>(() => {});
+
+  const node = (setNX: () => Promise<string | null>, extend: () => Promise<boolean>) =>
+    ({
+      setNX: vi.fn(setNX),
+      extendIfMatch: vi.fn(extend),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+    }) as unknown as RedisAdapter;
+  const hung = () => node(never, never);
+  const within = <T>(promise: Promise<T>): Promise<T | 'still waiting'> =>
+    Promise.race([
+      promise,
+      new Promise<'still waiting'>(resolve =>
+        setTimeout(() => resolve('still waiting'), PROMPT_MS)
+      ),
+    ]);
+  const KEY = 'hung-node';
+  const redlock = (adapters: RedisAdapter[]) =>
+    new RedLock({ adapters, key: KEY, ttl: 10_000, retryAttempts: 0 });
+  const heldHandle = (): LockHandle => ({
+    id: 'held',
+    key: KEY,
+    value: 'held-value',
+    acquiredAt: Date.now(),
+    ttl: 10_000,
+  });
+
+  it('should acquire as soon as a quorum has granted', async () => {
+    const granting = () =>
+      node(
+        async () => 'OK',
+        async () => true
+      );
+    const lock = redlock([granting(), granting(), hung()]);
+
+    const handle = await within(lock.acquire());
+
+    expect(handle).not.toBe('still waiting');
+    expect((handle as LockHandle).metadata?.nodes).toEqual(['node-0', 'node-1']);
+  });
+
+  it('should fail as soon as the quorum is out of reach, and release the node still in flight at once', async () => {
+    const refusing = () =>
+      node(
+        async () => null,
+        async () => false
+      );
+    const stuck = hung();
+    const lock = redlock([refusing(), refusing(), stuck]);
+
+    const outcome = await within(lock.acquire().catch((error: unknown) => error));
+
+    expect(outcome).toBeInstanceOf(LockAcquisitionError);
+    expect(stuck.delIfMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should extend as soon as a quorum has extended', async () => {
+    const granting = () =>
+      node(
+        async () => 'OK',
+        async () => true
+      );
+    const lock = redlock([granting(), granting(), hung()]);
+
+    await expect(within(lock.extend(heldHandle(), 10_000))).resolves.toBe(true);
+  });
+
+  it('should report a failed extension as soon as the quorum is out of reach', async () => {
+    const refusing = () =>
+      node(
+        async () => 'OK',
+        async () => false
+      );
+    const lock = redlock([refusing(), refusing(), hung()]);
+
+    await expect(within(lock.extend(heldHandle(), 10_000))).resolves.toBe(false);
+  });
+});
+
+describe('RedLock retry after a round that failed early', () => {
+  const SLOW_REPLY_MS = 60;
+  const RETRY_DELAY_MS = 40;
+
+  /** Commands take effect when sent and reply later, like one connection to a slow server */
+  const slowNode = (): RedisAdapter => {
+    let held: string | null = null;
+    const reply = <T>(value: T) =>
+      new Promise<T>(resolve => setTimeout(() => resolve(value), SLOW_REPLY_MS));
+    return {
+      setNX: vi.fn((_key: string, value: string) => {
+        const granted = held === null;
+        if (granted) held = value;
+        return reply(granted ? 'OK' : null);
+      }),
+      delIfMatch: vi.fn((_key: string, value: string) => {
+        const matched = held === value;
+        if (matched) held = null;
+        return reply(matched);
+      }),
+    } as unknown as RedisAdapter;
+  };
+  const fastNode = (replies: Array<'OK' | null>): RedisAdapter => {
+    let call = 0;
+    return {
+      setNX: vi.fn(async () => replies[Math.min(call++, replies.length - 1)]!),
+      delIfMatch: vi.fn().mockResolvedValue(false),
+    } as unknown as RedisAdapter;
+  };
+
+  it('should release nodes still in flight at once, so the retry is not blocked by its own keys', async () => {
+    const slow = [slowNode(), slowNode()];
+    const lock = new RedLock({
+      adapters: [fastNode([null]), fastNode([null]), fastNode([null, 'OK']), ...slow],
+      key: generateTestKey('retry'),
+      ttl: 10_000,
+      quorum: 3,
+      retryAttempts: 1,
+      retryDelay: RETRY_DELAY_MS,
+    });
+
+    const handle = await lock.acquire();
+
+    expect(handle.metadata?.attempts).toBe(2);
+    expect(handle.metadata?.nodes).toEqual(['node-2', 'node-3', 'node-4']);
   });
 });

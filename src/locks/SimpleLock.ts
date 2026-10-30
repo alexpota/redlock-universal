@@ -4,6 +4,13 @@ import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
 import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
+import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
 } from '../utils/auto-extension.js';
@@ -30,7 +37,6 @@ export class SimpleLock implements Lock {
   private _configCache?: Readonly<SimpleLockConfig>;
 
   private _lastHealthCheck: number = 0;
-  private _healthCheckInterval: number = DEFAULTS.HEALTH_CHECK_INTERVAL;
   private _isHealthy: boolean = true;
 
   private _circuitBreakerFailures: number = 0;
@@ -80,14 +86,13 @@ export class SimpleLock implements Lock {
           }
           this._circuitBreakerTimeout = cbConfig.resetTimeout;
         }
-        if (cbConfig.healthCheckInterval !== undefined) {
-          if (
-            cbConfig.healthCheckInterval <= 0 ||
-            !Number.isInteger(cbConfig.healthCheckInterval)
-          ) {
+        // The option no longer has an effect, but a value that is set is still validated
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        const { healthCheckInterval } = cbConfig;
+        if (healthCheckInterval !== undefined) {
+          if (healthCheckInterval <= 0 || !Number.isInteger(healthCheckInterval)) {
             throw new Error('Circuit breaker healthCheckInterval must be a positive integer');
           }
-          this._healthCheckInterval = cbConfig.healthCheckInterval;
         }
       }
     }
@@ -110,6 +115,7 @@ export class SimpleLock implements Lock {
     if (ttl <= 0 || !Number.isInteger(ttl)) {
       throw new Error('TTL must be a positive integer');
     }
+    assertTtlAboveDrift(ttl);
 
     const retryAttempts = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
     if (retryAttempts < 0 || !Number.isInteger(retryAttempts)) {
@@ -173,34 +179,27 @@ export class SimpleLock implements Lock {
   }
 
   /**
-   * Check Redis connection health periodically
+   * Track connection health from the outcome of a lock command: any reply shows the server
+   * is reachable, an error shows it may not be. Logs only when the health changes
    */
-  private async checkConnectionHealth(): Promise<void> {
-    const now = Date.now();
-    if (now - this._lastHealthCheck < this._healthCheckInterval) {
+  private recordHealth(error?: Error): void {
+    this._lastHealthCheck = Date.now();
+
+    const isHealthy = error === undefined;
+    if (isHealthy === this._isHealthy) {
       return;
     }
 
-    this._lastHealthCheck = now;
-
-    try {
-      await this.adapter.ping();
-      this.updateCircuitBreaker(true);
-      if (!this._isHealthy) {
-        this._isHealthy = true;
-        if (this.logger) {
-          this.logger.info('Redis connection recovered', {
-            key: this.key,
-            correlationId: this.correlationId,
-            healthStatus: 'recovered',
-          });
-        }
-      }
-    } catch (error) {
-      this._isHealthy = false;
-      this.updateCircuitBreaker(false);
-      if (this.logger) {
-        this.logger.error('Redis health check failed', error as Error, {
+    this._isHealthy = isHealthy;
+    if (this.logger) {
+      if (isHealthy) {
+        this.logger.info('Redis connection recovered', {
+          key: this.key,
+          correlationId: this.correlationId,
+          healthStatus: 'recovered',
+        });
+      } else {
+        this.logger.error('Redis health check failed', error, {
           key: this.key,
           correlationId: this.correlationId,
           healthStatus: 'failed',
@@ -243,52 +242,59 @@ export class SimpleLock implements Lock {
       }
     }
 
-    if (this._circuitBreakerEnabled) {
-      await this.checkConnectionHealth();
-    }
-
     const startTime = Date.now();
+    const drift = clockDriftFor(this.ttl);
     let lastError: Error | null = null;
-    const lockValue = generateLockValue();
 
     for (let attempt = 0; attempt <= this.retryAttempts; attempt++) {
+      const lockValue = generateLockValue();
+
       try {
-        const result = await this.adapter.setNX(this.key, lockValue, this.ttl);
+        const timed = await sendTimed(() => this.adapter.setNX(this.key, lockValue, this.ttl));
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(true);
+          this.recordHealth();
         }
 
-        if (result === REDIS_OK_RESPONSE) {
-          const acquisitionTime = Date.now() - startTime;
-          const acquiredAt = Date.now();
+        if (timed.reply === REDIS_OK_RESPONSE) {
+          const late = lateGrantError(timed, this.ttl, drift, () =>
+            releaseQuietly(this.adapter, this.key, lockValue, this.logger)
+          );
 
-          const handle: LockHandle = {
-            id: generateLockId(),
-            key: this.key,
-            value: lockValue,
-            acquiredAt,
-            ttl: this.ttl,
-            metadata: {
-              attempts: attempt + 1,
-              acquisitionTime,
-              ...this._metadataTemplate,
-            },
-          };
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
 
-          this.onAcquire?.(handle);
+            const handle: LockHandle = {
+              id: generateLockId(),
+              key: this.key,
+              value: lockValue,
+              acquiredAt: timed.sentAt,
+              ttl: this.ttl,
+              metadata: {
+                attempts: attempt + 1,
+                acquisitionTime,
+                ...this._metadataTemplate,
+              },
+            };
 
-          return handle;
-        }
+            this.onAcquire?.(handle);
 
-        if (!lastError) {
+            return handle;
+          }
+
+          lastError = late;
+        } else {
           lastError = new Error(`Lock "${this.key}" is already held`);
         }
       } catch (error) {
         lastError = error as Error;
+        // The SET may still have run: release this attempt's value without waiting
+        releaseQuietly(this.adapter, this.key, lockValue, this.logger);
 
         if (this._circuitBreakerEnabled) {
           this.updateCircuitBreaker(false);
+          this.recordHealth(lastError);
         }
 
         if (error instanceof Error && error.message?.includes('ECONNREFUSED')) {

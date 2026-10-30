@@ -5,6 +5,13 @@ import { SimpleLock } from '../locks/SimpleLock.js';
 import { RedLock } from '../locks/RedLock.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 import { generateLockValue, generateLockId } from '../utils/crypto.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import { LockAcquisitionError } from '../types/errors.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
 
@@ -199,10 +206,7 @@ export class LockManager {
    * Release a tracked lock
    */
   async releaseLock(handle: LockHandle): Promise<boolean> {
-    this.recordHoldTime(Date.now() - handle.acquiredAt);
-
-    this.activeLocks.delete(handle.id);
-    this.stats.activeLocks--;
+    this.untrackLock(handle);
     const lock =
       handle.metadata?.strategy === 'redlock'
         ? this.createRedLock(handle.key)
@@ -273,11 +277,12 @@ export class LockManager {
 
     const adapter = this.config.nodes[nodeIndex]!;
     const ttl = options.ttl ?? this.config.defaultTTL;
+    assertTtlAboveDrift(ttl);
     const retryAttempts = options.retryAttempts ?? this.config.defaultRetryAttempts;
     const retryDelay = options.retryDelay ?? this.config.defaultRetryDelay;
     const startTime = Date.now();
+    const drift = clockDriftFor(ttl);
     const sortedKeys = [...keys].sort();
-    const values = sortedKeys.map(() => generateLockValue());
 
     this.stats.totalLocks += sortedKeys.length;
 
@@ -297,65 +302,84 @@ export class LockManager {
     let lastFailedIndex: number | undefined;
 
     for (let attempt = 0; attempt <= retryAttempts; attempt++) {
+      const values = sortedKeys.map(() => generateLockValue());
+
       try {
-        const result = await adapter.batchSetNX(sortedKeys, values, ttl);
+        const timed = await sendTimed(() => adapter.batchSetNX(sortedKeys, values, ttl));
+        const result = timed.reply;
 
         if (result.success) {
-          const acquisitionTime = Date.now() - startTime;
+          const late = lateGrantError(timed, ttl, drift, () =>
+            sortedKeys.forEach((key, index) =>
+              releaseQuietly(adapter, key, values[index]!, this.config.logger)
+            )
+          );
 
-          const handles: LockHandle[] = sortedKeys.map((key, index) => ({
-            id: generateLockId(),
-            key,
-            value: values[index]!,
-            acquiredAt: Date.now(),
-            ttl,
-            metadata: {
-              attempts: attempt + 1,
-              acquisitionTime,
-              nodes: [`${NODE_ID_PREFIX}${nodeIndex}`],
-              strategy: 'simple' as const,
-            },
-          }));
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
 
-          this.recordAcquisitionTime(acquisitionTime);
-          this.stats.acquiredLocks += handles.length;
-          this.stats.activeLocks += handles.length;
+            const handles: LockHandle[] = sortedKeys.map((key, index) => ({
+              id: generateLockId(),
+              key,
+              value: values[index]!,
+              acquiredAt: timed.sentAt,
+              ttl,
+              metadata: {
+                attempts: attempt + 1,
+                acquisitionTime,
+                nodes: [`${NODE_ID_PREFIX}${nodeIndex}`],
+                strategy: 'simple' as const,
+              },
+            }));
 
-          for (const handle of handles) {
-            this.activeLocks.set(handle.id, handle);
+            this.recordAcquisitionTime(acquisitionTime);
+            this.stats.acquiredLocks += handles.length;
+            this.stats.activeLocks += handles.length;
+
+            for (const handle of handles) {
+              this.activeLocks.set(handle.id, handle);
+            }
+
+            if (this.config.logger) {
+              this.config.logger.info('Batch lock acquisition succeeded', {
+                lockCount: handles.length,
+                acquisitionTime,
+                avgTimePerLock: acquisitionTime / handles.length,
+                attempts: attempt + 1,
+              });
+            }
+
+            return handles;
           }
 
-          if (this.config.logger) {
-            this.config.logger.info('Batch lock acquisition succeeded', {
-              lockCount: handles.length,
-              acquisitionTime,
-              avgTimePerLock: acquisitionTime / handles.length,
-              attempts: attempt + 1,
+          lastError = late;
+          lastFailedKey = sortedKeys[0];
+          lastFailedIndex = 0;
+        } else {
+          // Acquisition failed - key is already locked
+          lastFailedKey = result.failedKey;
+          lastFailedIndex = result.failedIndex;
+          lastError = new Error(
+            `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
+          );
+
+          if (this.config.logger && attempt < retryAttempts) {
+            this.config.logger.debug?.('Batch lock acquisition attempt failed, retrying', {
+              attempt: attempt + 1,
+              maxAttempts: retryAttempts + 1,
+              failedKey: result.failedKey,
+              failedIndex: result.failedIndex,
+              retryDelay,
             });
           }
-
-          return handles;
-        }
-
-        // Acquisition failed - key is already locked
-        lastFailedKey = result.failedKey;
-        lastFailedIndex = result.failedIndex;
-        lastError = new Error(
-          `Batch acquisition failed: key "${result.failedKey}" at index ${result.failedIndex} is already locked`
-        );
-
-        if (this.config.logger && attempt < retryAttempts) {
-          this.config.logger.debug?.('Batch lock acquisition attempt failed, retrying', {
-            attempt: attempt + 1,
-            maxAttempts: retryAttempts + 1,
-            failedKey: result.failedKey,
-            failedIndex: result.failedIndex,
-            retryDelay,
-          });
         }
       } catch (error) {
         // Unexpected error (network, Redis, etc.)
         lastError = error as Error;
+        // The script may still have run: release this attempt's values without waiting
+        sortedKeys.forEach((key, index) =>
+          releaseQuietly(adapter, key, values[index]!, this.config.logger)
+        );
         lastFailedKey = sortedKeys[0];
         lastFailedIndex = 0;
 
@@ -416,11 +440,12 @@ export class LockManager {
   }
 
   /**
-   * Stop tracking a lock as active (no-op if it is not tracked)
+   * Stop tracking a lock and record how long it was held (no-op if it is not tracked)
    */
   private untrackLock(handle: LockHandle): void {
     if (this.activeLocks.delete(handle.id)) {
       this.stats.activeLocks--;
+      this.recordHoldTime(Date.now() - handle.acquiredAt);
     }
   }
 
@@ -440,7 +465,6 @@ export class LockManager {
    */
   async releaseBatch(handles: LockHandle[]): Promise<boolean[]> {
     const releasePromises = handles.map(async handle => {
-      this.recordHoldTime(Date.now() - handle.acquiredAt);
       this.untrackLock(handle);
 
       const lock = this.createSimpleLock(handle.key, { nodeIndex: this.batchNodeIndex(handle) });

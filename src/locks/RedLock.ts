@@ -9,6 +9,9 @@ import type { ILogger } from '../monitoring/Logger.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
 import { generateLockId, generateLockValue } from '../utils/crypto.js';
 import { executeWithAutoExtension, type ExtendedAbortSignal } from '../utils/auto-extension.js';
+import { emitWarningOnce } from '../utils/warnings.js';
+import { assertTtlAboveDrift, clockDriftFor, validityExceededError } from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import { DEFAULTS, ERROR_MESSAGES } from '../constants.js';
 
 // Redis response constants
@@ -18,6 +21,40 @@ const REDIS_OK_RESPONSE = 'OK';
 const DISTRIBUTED_RETRY_MULTIPLIER = 2;
 const QUORUM_DIVISOR = 2;
 const QUORUM_OFFSET = 1;
+const MINORITY_QUORUM_WARNING_CODE = 'REDLOCK_UNIVERSAL_MINORITY_QUORUM';
+
+/**
+ * Resolve once `quorum` results are successes, or once so many have failed that the quorum
+ * is out of reach, without waiting for the other nodes. Nodes that have not replied by then
+ * are undefined in the result. The pending promises must not reject.
+ */
+function settleOnQuorum<T>(
+  pending: ReadonlyArray<Promise<T>>,
+  quorum: number,
+  isSuccess: (result: T) => boolean
+): Promise<Array<T | undefined>> {
+  return new Promise(resolve => {
+    // Dense, so nodes that have not replied map to undefined rather than holes
+    const results = new Array<T | undefined>(pending.length).fill(undefined);
+    const failureLimit = pending.length - quorum;
+    let successes = 0;
+    let failures = 0;
+
+    pending.forEach((promise, index) => {
+      void promise.then(result => {
+        results[index] = result;
+        if (isSuccess(result)) {
+          successes++;
+        } else {
+          failures++;
+        }
+        if (successes >= quorum || failures > failureLimit) {
+          resolve(results.slice());
+        }
+      });
+    });
+  });
+}
 
 /**
  * Result of attempting to acquire a lock on a single Redis node
@@ -31,8 +68,6 @@ interface NodeLockResult {
   readonly nodeId: string;
   /** Error if acquisition failed */
   readonly error?: Error;
-  /** Time taken for this operation in milliseconds */
-  readonly operationTime: number;
 }
 
 /**
@@ -58,6 +93,27 @@ export class RedLock implements Lock {
     this.config = config.logger ? { ...baseConfig, logger: config.logger } : baseConfig;
 
     this.validateConfig();
+    this.warnIfMinorityQuorum();
+  }
+
+  /**
+   * Warn once per process when the quorum is not a majority: two clients can then
+   * hold the same lock on disjoint sets of nodes
+   */
+  private warnIfMinorityQuorum(): void {
+    const { quorum, adapters, key, logger } = this.config;
+    if (quorum > adapters.length / QUORUM_DIVISOR) {
+      return;
+    }
+
+    const majority = Math.floor(adapters.length / QUORUM_DIVISOR) + QUORUM_OFFSET;
+    const message =
+      `RedLock quorum ${quorum} of ${adapters.length} nodes is not a majority, so two clients ` +
+      `can hold the same lock at once. Use a quorum of at least ${majority}.`;
+
+    if (emitWarningOnce(MINORITY_QUORUM_WARNING_CODE, message)) {
+      logger?.warn(message, { key, quorum, nodes: adapters.length });
+    }
   }
 
   /**
@@ -93,6 +149,8 @@ export class RedLock implements Lock {
     if (this.config.clockDriftFactor < 0 || this.config.clockDriftFactor >= 1) {
       throw new Error('Clock drift factor must be between 0 and 1');
     }
+
+    assertTtlAboveDrift(this.config.ttl, this.config.clockDriftFactor);
   }
 
   /**
@@ -107,7 +165,7 @@ export class RedLock implements Lock {
         const lockValue = generateLockValue();
         // Each node starts the TTL when it receives the request, so the lock is valid from here
         const attemptStartedAt = Date.now();
-        const result = await this.attemptLockAcquisition(lockValue);
+        const result = await this.attemptLockAcquisition(lockValue, performance.now());
 
         if (result.success) {
           const acquisitionTime = Date.now() - startTime;
@@ -126,12 +184,14 @@ export class RedLock implements Lock {
           };
         }
 
-        lastError = new Error(
-          `RedLock quorum not achieved: ${result.successCount}/${this.config.quorum} required`
-        );
+        lastError =
+          result.validityExceeded ??
+          new Error(
+            `RedLock quorum not achieved: ${result.successCount}/${this.config.quorum} required`
+          );
 
-        // Release any partial locks acquired
-        await this.releasePartialLocks(result.nodeResults, lockValue);
+        // Release what this attempt may have set, without waiting for slow nodes
+        this.releasePartialLocks(result.nodeResults, lockValue);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR);
       }
@@ -152,33 +212,31 @@ export class RedLock implements Lock {
   /**
    * Attempt to acquire lock on all Redis nodes
    */
-  private async attemptLockAcquisition(lockValue: string): Promise<{
+  private async attemptLockAcquisition(
+    lockValue: string,
+    startedAt: number
+  ): Promise<{
     success: boolean;
     successCount: number;
     successfulNodes: string[];
-    nodeResults: NodeLockResult[];
+    /** Each node's reply when the outcome was decided; undefined while it is still in flight */
+    nodeResults: ReadonlyArray<NodeLockResult | undefined>;
+    validityExceeded?: Error;
   }> {
-    const startTime = Date.now();
-
-    // Try to acquire lock on all nodes simultaneously
-    const lockPromises = this.adapters.map((adapter, index) =>
+    // Try to acquire lock on all nodes simultaneously; stop waiting once the outcome is decided
+    const replies = this.adapters.map((adapter, index) =>
       this.acquireOnSingleNode(adapter, lockValue, `node-${index}`)
     );
-
-    const nodeResults = await Promise.allSettled(lockPromises);
-    const actualResults: NodeLockResult[] = nodeResults.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
+    const nodeResults = await settleOnQuorum(replies, this.config.quorum, result => result.success);
+    // A node that has not replied by now does not count towards the quorum
+    const actualResults: NodeLockResult[] = nodeResults.map(
+      (result, index) =>
+        result ?? {
           success: false,
           adapter: this.adapters[index]!,
           nodeId: `node-${index}`,
-          error: result.reason,
-          operationTime: Date.now() - startTime,
-        };
-      }
-    });
+        }
+    );
 
     const successfulResults = actualResults.filter(result => result.success);
     const successCount = successfulResults.length;
@@ -186,20 +244,22 @@ export class RedLock implements Lock {
     // Check if we have quorum
     const hasQuorum = successCount >= this.config.quorum;
 
-    // Calculate time spent on lock acquisition
-    const totalTime = Date.now() - startTime;
+    // Time spent on lock acquisition, on the monotonic clock
+    const elapsed = performance.now() - startedAt;
 
     // Account for clock drift - reduce effective TTL
-    const driftTime = Math.floor(this.config.ttl * this.config.clockDriftFactor) + 2;
-    const effectiveTime = totalTime + driftTime;
+    const drift = clockDriftFor(this.config.ttl, this.config.clockDriftFactor);
 
     // If acquisition took too long relative to TTL, it's not safe
-    if (effectiveTime >= this.config.ttl) {
+    if (elapsed + drift >= this.config.ttl) {
       return {
         success: false,
         successCount,
         successfulNodes: successfulResults.map(r => r.nodeId),
-        nodeResults: actualResults,
+        nodeResults,
+        ...(hasQuorum && {
+          validityExceeded: validityExceededError(elapsed, drift, this.config.ttl),
+        }),
       };
     }
 
@@ -207,7 +267,7 @@ export class RedLock implements Lock {
       success: hasQuorum,
       successCount,
       successfulNodes: successfulResults.map(r => r.nodeId),
-      nodeResults: actualResults,
+      nodeResults,
     };
   }
 
@@ -219,46 +279,39 @@ export class RedLock implements Lock {
     lockValue: string,
     nodeId: string
   ): Promise<NodeLockResult> {
-    const startTime = Date.now();
-
     try {
       const result = await adapter.setNX(this.config.key, lockValue, this.config.ttl);
-      const operationTime = Date.now() - startTime;
 
       return {
         success: result === REDIS_OK_RESPONSE,
         adapter,
         nodeId,
-        operationTime,
       };
     } catch (error) {
-      const operationTime = Date.now() - startTime;
       return {
         success: false,
         adapter,
         nodeId,
         error: error instanceof Error ? error : new Error(ERROR_MESSAGES.UNKNOWN_ERROR),
-        operationTime,
       };
     }
   }
 
   /**
-   * Release any partially acquired locks to prevent deadlocks
+   * Release this attempt's value, without waiting, on every node that set it or may have:
+   * nodes that granted, failed, timed out or have not replied yet. A node still in flight gets
+   * the release right away; it travels behind the SET on the same connection, so it runs after
+   * it, before a retry's SET. Nodes that answered "not set" are skipped
    */
-  private async releasePartialLocks(
-    nodeResults: NodeLockResult[],
+  private releasePartialLocks(
+    nodeResults: ReadonlyArray<NodeLockResult | undefined>,
     lockValue: string
-  ): Promise<void> {
-    const releasePromises = nodeResults
-      .filter(result => result.success)
-      .map(result =>
-        result.adapter.delIfMatch(this.config.key, lockValue).catch(() => {
-          // Ignore release errors for partial cleanup
-        })
-      );
-
-    await Promise.allSettled(releasePromises);
+  ): void {
+    nodeResults.forEach((result, index) => {
+      if (!result || result.success || result.error) {
+        releaseQuietly(this.adapters[index]!, this.config.key, lockValue, this.config.logger);
+      }
+    });
   }
 
   /**
@@ -302,14 +355,14 @@ export class RedLock implements Lock {
     try {
       // extendIfMatch checks ownership atomically on each node, so a separate read round
       // would only delay the extension until the slowest node replies
-      const extendPromises = this.adapters.map(adapter =>
-        adapter.extendIfMatch(handle.key, handle.value, ttl)
+      const extendResults = await settleOnQuorum(
+        this.adapters.map(adapter =>
+          adapter.extendIfMatch(handle.key, handle.value, ttl).catch(() => false)
+        ),
+        this.config.quorum,
+        extended => extended === true
       );
-
-      const extendResults = await Promise.allSettled(extendPromises);
-      const successfulExtensions = extendResults.filter(
-        result => result.status === 'fulfilled' && result.value === true
-      ).length;
+      const successfulExtensions = extendResults.filter(extended => extended === true).length;
 
       return successfulExtensions >= this.config.quorum;
     } catch (error) {

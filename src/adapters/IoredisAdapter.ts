@@ -15,9 +15,12 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-import { executeScript } from './script-execution.js';
+import type { ScriptCalls } from './script-execution.js';
+import { emitWarningOnce } from '../utils/warnings.js';
 
 type IoredisClient = Redis | Cluster;
+
+const DOUBLE_KEY_PREFIX_WARNING_CODE = 'REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX';
 
 // Redis command constants
 const REDIS_STATUS_READY = 'ready';
@@ -32,6 +35,27 @@ export class IoredisAdapter extends BaseAdapter {
   constructor(client: IoredisClient, options: RedisAdapterOptions = {}) {
     super(options);
     this.client = client;
+    this.warnIfDoubleKeyPrefix();
+  }
+
+  /**
+   * Warn once per process when the client and the adapter both set a key prefix: ioredis puts
+   * its own prefix in front of the adapter's, so every lock key carries both
+   */
+  private warnIfDoubleKeyPrefix(): void {
+    const clientPrefix = this.client.options?.keyPrefix;
+    const adapterPrefix = this.options.keyPrefix;
+    if (!clientPrefix || !adapterPrefix) {
+      return;
+    }
+
+    const message =
+      `ioredis keyPrefix "${clientPrefix}" and adapter keyPrefix "${adapterPrefix}" are both set, ` +
+      `so lock keys are stored as "${clientPrefix}${adapterPrefix}<key>". Set the prefix in one place.`;
+
+    if (emitWarningOnce(DOUBLE_KEY_PREFIX_WARNING_CODE, message)) {
+      this.options.logger?.warn(message, { clientPrefix, adapterPrefix });
+    }
   }
 
   /**
@@ -41,25 +65,20 @@ export class IoredisAdapter extends BaseAdapter {
     return new IoredisAdapter(client, options);
   }
 
-  /**
-   * Execute a Lua script by SHA, sending the script itself when the node does not have it
-   * @private
-   */
-  private async _executeScript<T>(
-    scriptCacheKey: string,
+  protected override scriptCalls(
     scriptBody: string,
     keys: string[],
     args: (string | number)[]
-  ): Promise<T> {
+  ): ScriptCalls {
     const stringArgs = args.map(a => a.toString());
 
-    return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+    return {
       evalSha: sha =>
         this.withTimeout(this.client.evalsha(sha, keys.length, ...keys, ...stringArgs)),
       // Same lowercase name as ioredis's built-in command, so the keys are found for routing
       evalScript: () =>
         this.withTimeout(this.client.call('eval', scriptBody, keys.length, ...keys, ...stringArgs)),
-    });
+    };
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {
@@ -74,7 +93,7 @@ export class IoredisAdapter extends BaseAdapter {
 
       return result as string | null;
     } catch (error) {
-      throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
+      throw new Error(`Failed to acquire lock: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -86,7 +105,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.get(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to get key: ${(error as Error).message}`);
+      throw new Error(`Failed to get key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -98,7 +117,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.del(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to delete key: ${(error as Error).message}`);
+      throw new Error(`Failed to delete key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -197,7 +216,7 @@ export class IoredisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.ping());
     } catch (error) {
-      throw new Error(`Ping failed: ${(error as Error).message}`);
+      throw new Error(`Ping failed: ${(error as Error).message}`, { cause: error });
     }
   }
 

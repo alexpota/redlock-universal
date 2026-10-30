@@ -5,6 +5,14 @@
 import type { RedisAdapter } from '../types/adapters.js';
 import type { Lock, LockHandle, SimpleLockConfig } from '../types/locks.js';
 import { LockAcquisitionError, LockReleaseError, LockExtensionError } from '../types/errors.js';
+import { generateLockValue } from '../utils/crypto.js';
+import {
+  assertTtlAboveDrift,
+  clockDriftFor,
+  lateGrantError,
+  sendTimed,
+} from '../utils/validity.js';
+import { releaseQuietly } from '../utils/release-quietly.js';
 import {
   executeWithSingleLockExtension,
   type ExtendedAbortSignal,
@@ -26,8 +34,7 @@ LOCK_HELD_ERROR.stack = '';
  * - No health checks by default (saves ~50KB)
  * - Pre-allocated error objects (saves stack trace overhead)
  * - Minimal property storage with short names
- * - No closures or callbacks
- * - Inline value generation
+ * - Lock values from crypto.randomUUID
  */
 export class LeanSimpleLock implements Lock {
   private readonly a: RedisAdapter;
@@ -40,42 +47,53 @@ export class LeanSimpleLock implements Lock {
     this.a = config.adapter;
     this.k = config.key;
     this.t = config.ttl ?? DEFAULTS.TTL;
+    assertTtlAboveDrift(this.t);
     this.r = config.retryAttempts ?? DEFAULTS.RETRY_ATTEMPTS;
     this.d = config.retryDelay ?? DEFAULTS.RETRY_DELAY;
   }
 
   async acquire(): Promise<LockHandle> {
     const startTime = Date.now();
+    const drift = clockDriftFor(this.t);
     let lastError: Error | null = null;
     let attempts = 0;
 
-    const value = `${startTime}-${Math.random().toString(36).slice(2)}-${process.pid}`;
-
     for (let attempt = 0; attempt <= this.r; attempt++) {
       attempts++;
+      const value = generateLockValue();
       try {
-        const result = await this.a.setNX(this.k, value, this.t);
+        const timed = await sendTimed(() => this.a.setNX(this.k, value, this.t));
 
-        if (result === REDIS_OK_RESPONSE) {
-          const acquisitionTime = Date.now() - startTime;
+        if (timed.reply === REDIS_OK_RESPONSE) {
+          const late = lateGrantError(timed, this.t, drift, () =>
+            releaseQuietly(this.a, this.k, value)
+          );
 
-          return {
-            id: value,
-            key: this.k,
-            value,
-            acquiredAt: startTime,
-            ttl: this.t,
-            metadata: {
-              attempts,
-              acquisitionTime,
-              strategy: 'simple' as const,
-            },
-          };
+          if (!late) {
+            const acquisitionTime = Date.now() - startTime;
+
+            return {
+              id: value,
+              key: this.k,
+              value,
+              acquiredAt: timed.sentAt,
+              ttl: this.t,
+              metadata: {
+                attempts,
+                acquisitionTime,
+                strategy: 'simple' as const,
+              },
+            };
+          }
+
+          lastError = late;
+        } else {
+          lastError = LOCK_HELD_ERROR;
         }
-
-        lastError = LOCK_HELD_ERROR;
       } catch (error) {
         lastError = error instanceof Error ? error : LOCK_HELD_ERROR;
+        // The SET may still have run: release this attempt's value without waiting
+        releaseQuietly(this.a, this.k, value);
       }
 
       if (attempt < this.r) {

@@ -424,6 +424,84 @@ describe('SimpleLock Unit Tests', () => {
     });
   });
 
+  describe('health', () => {
+    it('should not send a PING before acquiring', async () => {
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+
+      await lock.acquire();
+
+      expect(mockAdapter.ping).not.toHaveBeenCalled();
+    });
+
+    it('should report health from the outcome of its SET commands', async () => {
+      const healthLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+      });
+
+      mockAdapter.setNX = vi
+        .fn()
+        .mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:6379'));
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      const afterFailure = healthLock.getHealth();
+      expect(afterFailure.healthy).toBe(false);
+      expect(afterFailure.lastCheck).toBeGreaterThan(0);
+
+      // A "lock is held" reply still shows the server is reachable
+      mockAdapter.setNX = vi.fn().mockResolvedValue(null);
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      expect(healthLock.getHealth().healthy).toBe(true);
+    });
+
+    it('should still validate the deprecated healthCheckInterval option', () => {
+      const create = (healthCheckInterval: number): SimpleLock =>
+        new SimpleLock({
+          adapter: mockAdapter,
+          key: 'test-lock',
+          circuitBreaker: { healthCheckInterval },
+        });
+
+      expect(() => create(0)).toThrow(
+        'Circuit breaker healthCheckInterval must be a positive integer'
+      );
+      expect(() => create(1.5)).toThrow(
+        'Circuit breaker healthCheckInterval must be a positive integer'
+      );
+      expect(() => create(30_000)).not.toThrow();
+    });
+
+    it('should log once when health is lost and once when it comes back', async () => {
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const healthLock = new SimpleLock({
+        adapter: mockAdapter,
+        key: 'test-lock',
+        ttl: TEST_CONFIG.DEFAULT_TTL,
+        retryAttempts: 0,
+        logger,
+      });
+
+      mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis down'));
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      await expect(healthLock.acquire()).rejects.toThrow(LockAcquisitionError);
+      mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
+      await healthLock.acquire();
+
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Redis health check failed',
+        expect.any(Error),
+        expect.objectContaining({ key: 'test-lock', healthStatus: 'failed' })
+      );
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        'Redis connection recovered',
+        expect.objectContaining({ key: 'test-lock', healthStatus: 'recovered' })
+      );
+    });
+  });
+
   describe('circuit breaker', () => {
     it('should stay closed when failures are below threshold', async () => {
       const cbLock = new SimpleLock({
@@ -494,9 +572,8 @@ describe('SimpleLock Unit Tests', () => {
         // Advance past the default 60000ms resetTimeout
         vi.advanceTimersByTime(60001);
 
-        // Set up mocks for successful probe
+        // Set up a successful probe
         mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
-        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
 
         const handle = await cbLock.acquire();
 
@@ -529,9 +606,8 @@ describe('SimpleLock Unit Tests', () => {
         // Advance past resetTimeout
         vi.advanceTimersByTime(60001);
 
-        // Keep setNX and ping rejecting
+        // Keep setNX rejecting
         mockAdapter.setNX = vi.fn().mockRejectedValue(new Error('Redis still down'));
-        mockAdapter.ping = vi.fn().mockRejectedValue(new Error('Redis still down'));
 
         // Should throw LockAcquisitionError (the actual Redis error, not circuit breaker message)
         await expect(cbLock.acquire()).rejects.toThrow(LockAcquisitionError);
@@ -638,7 +714,6 @@ describe('SimpleLock Unit Tests', () => {
         vi.advanceTimersByTime(2001);
 
         mockAdapter.setNX = vi.fn().mockResolvedValue('OK');
-        mockAdapter.ping = vi.fn().mockResolvedValue('PONG');
 
         const handle = await customLock.acquire();
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LockManager } from '../../../src/manager/LockManager.js';
 import type { RedisAdapter, AtomicExtensionResult } from '../../../src/types/adapters.js';
+import type { LockHandle } from '../../../src/types/locks.js';
 
 // Mock Redis adapter for testing
 class MockRedisAdapter implements RedisAdapter {
@@ -305,13 +306,13 @@ describe('LockManager', () => {
       const adapter = new MockRedisAdapter();
       const manager = new LockManager({ nodes: [adapter] });
 
-      // Acquire a lock with very short TTL
-      await manager.acquireLock('test-key', { ttl: 1 });
+      // Acquire a lock with a short TTL
+      await manager.acquireLock('test-key', { ttl: 50 });
 
       expect(manager.getStats().activeLocks).toBe(1);
 
       // Wait for lock to expire
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 60));
 
       const cleaned = await manager.cleanupExpiredLocks();
       expect(cleaned).toBe(1);
@@ -344,5 +345,78 @@ describe('LockManager', () => {
       expect(metrics).toContain('redlock_locks_acquired_total');
       expect(metrics).toContain('redlock_acquisition_duration_ms');
     });
+  });
+});
+
+describe('LockManager lock tracking', () => {
+  const HOLD_MS = 20;
+  const createBatchNode = (): RedisAdapter =>
+    ({
+      batchSetNX: vi.fn(async (keys: string[]) => ({ success: true, acquiredCount: keys.length })),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+      isConnected: vi.fn().mockReturnValue(true),
+    }) as unknown as RedisAdapter;
+
+  it('should not count a handle that is released twice', async () => {
+    const manager = new LockManager({ nodes: [new MockRedisAdapter() as unknown as RedisAdapter] });
+    const handle = await manager.acquireLock('tracked');
+
+    await manager.releaseLock(handle);
+    await manager.releaseLock(handle);
+
+    expect(manager.getStats().activeLocks).toBe(0);
+  });
+
+  it('should record hold time only for handles it tracks', async () => {
+    const manager = new LockManager({ nodes: [new MockRedisAdapter() as unknown as RedisAdapter] });
+    const untracked: LockHandle = {
+      id: 'untracked',
+      key: 'other',
+      value: 'other-value',
+      acquiredAt: Date.now() - 60_000,
+      ttl: 30_000,
+    };
+
+    await manager.releaseLock(untracked);
+    await manager.releaseBatch([untracked]);
+
+    expect(manager.getStats().averageHoldTime).toBe(0);
+  });
+
+  it('should record hold times for usingBatch', async () => {
+    const manager = new LockManager({ nodes: [createBatchNode()] });
+
+    await manager.usingBatch(
+      ['a', 'b'],
+      () => new Promise(resolve => setTimeout(resolve, HOLD_MS))
+    );
+
+    const stats = manager.getStats();
+    expect(stats.activeLocks).toBe(0);
+    expect(stats.averageHoldTime).toBeGreaterThanOrEqual(HOLD_MS - 1);
+  });
+});
+
+describe('LockManager batch logging', () => {
+  it('should log a debug line when a batch attempt finds a key held and will retry', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    let attempt = 0;
+    const node = {
+      batchSetNX: vi.fn(async (keys: string[]) =>
+        attempt++ === 0
+          ? { success: false, acquiredCount: 0, failedKey: keys[0], failedIndex: 1 }
+          : { success: true, acquiredCount: keys.length }
+      ),
+      delIfMatch: vi.fn().mockResolvedValue(true),
+      isConnected: vi.fn().mockReturnValue(true),
+    } as unknown as RedisAdapter;
+    const manager = new LockManager({ nodes: [node], logger });
+
+    await manager.acquireBatch(['a', 'b'], { retryAttempts: 1, retryDelay: 0 });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Batch lock acquisition attempt failed, retrying',
+      expect.objectContaining({ attempt: 1, maxAttempts: 2, failedKey: 'a', failedIndex: 1 })
+    );
   });
 });

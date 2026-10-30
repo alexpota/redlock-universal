@@ -14,7 +14,7 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-import { executeScript } from './script-execution.js';
+import type { ScriptCalls } from './script-execution.js';
 
 /**
  * Flexible type for node-redis clients.
@@ -56,36 +56,32 @@ export class NodeRedisAdapter extends BaseAdapter {
     return new NodeRedisAdapter(client, options);
   }
 
-  /**
-   * Execute a Lua script by SHA, sending the script itself when the node does not have it
-   * @private
-   */
-  private async _executeScript<T>(
-    scriptCacheKey: string,
+  protected override scriptCalls(
     scriptBody: string,
     keys: string[],
     args: (string | number)[]
-  ): Promise<T> {
+  ): ScriptCalls {
     const stringArgs = args.map(a => a.toString());
 
     if (this.routesScriptsByHand) {
       const scriptArgs = [keys.length.toString(), ...keys, ...stringArgs];
-      const send = (command: string[]): Promise<T> =>
-        this.client.sendCommand(keys[0], false, command) as Promise<T>;
+      const send = (command: string[]): Promise<unknown> =>
+        this.client.sendCommand(keys[0], false, command);
 
-      return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+      return {
         evalSha: sha => this.withTimeout(send(['EVALSHA', sha, ...scriptArgs])),
         evalScript: () => this.withTimeout(send(['EVAL', scriptBody, ...scriptArgs])),
-      });
+      };
     }
 
     // Typed commands keep the client's own key handling: key prefix (node-redis 6.1+)
     // and cluster routing
     const scriptOptions = { keys, arguments: stringArgs };
-    return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
-      evalSha: sha => this.withTimeout(this.client.evalSha(sha, scriptOptions) as Promise<T>),
-      evalScript: () => this.withTimeout(this.client.EVAL(scriptBody, scriptOptions) as Promise<T>),
-    });
+    return {
+      evalSha: sha => this.withTimeout(this.client.evalSha(sha, scriptOptions) as Promise<unknown>),
+      evalScript: () =>
+        this.withTimeout(this.client.EVAL(scriptBody, scriptOptions) as Promise<unknown>),
+    };
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {
@@ -105,7 +101,7 @@ export class NodeRedisAdapter extends BaseAdapter {
 
       return result as string | null;
     } catch (error) {
-      throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
+      throw new Error(`Failed to acquire lock: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -117,7 +113,7 @@ export class NodeRedisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.get(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to get key: ${(error as Error).message}`);
+      throw new Error(`Failed to get key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -129,7 +125,7 @@ export class NodeRedisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.del(prefixedKey));
     } catch (error) {
-      throw new Error(`Failed to delete key: ${(error as Error).message}`);
+      throw new Error(`Failed to delete key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -228,7 +224,7 @@ export class NodeRedisAdapter extends BaseAdapter {
     try {
       return await this.withTimeout(this.client.ping());
     } catch (error) {
-      throw new Error(`Ping failed: ${(error as Error).message}`);
+      throw new Error(`Ping failed: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -240,7 +236,12 @@ export class NodeRedisAdapter extends BaseAdapter {
     try {
       // Clear cached script SHAs on disconnect to prevent stale references
       this.scriptSHAs.clear();
-      await this.client.disconnect();
+      // node-redis 5 deprecates disconnect() in favour of destroy(); 4.x only has disconnect()
+      if (typeof this.client.destroy === 'function') {
+        await this.client.destroy();
+      } else {
+        await this.client.disconnect();
+      }
     } catch (error) {
       if (this.options.logger) {
         this.options.logger.warn('Warning during Redis disconnect', {

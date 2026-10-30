@@ -14,7 +14,7 @@ import {
   SCRIPT_CACHE_KEYS,
   REDIS_SCRIPT_SUCCESS,
 } from './BaseAdapter.js';
-import { executeScript } from './script-execution.js';
+import type { ScriptCalls } from './script-execution.js';
 
 // GLIDE-specific option constants
 const GLIDE_CONDITIONAL_SET_NX = 'onlyIfDoesNotExist' as const;
@@ -80,23 +80,18 @@ export class GlideAdapter extends BaseAdapter {
     return String(value);
   }
 
-  /**
-   * Execute a Lua script by SHA, sending the script itself when the node does not have it
-   * @private
-   */
-  private async _executeScript<T>(
-    scriptCacheKey: string,
+  protected override scriptCalls(
     scriptBody: string,
     keys: string[],
     args: (string | number)[]
-  ): Promise<T> {
+  ): ScriptCalls {
     const scriptArgs = [keys.length.toString(), ...keys, ...args.map(a => a.toString())];
 
-    return executeScript<T>(this.scriptSHAs, scriptCacheKey, scriptBody, {
+    return {
       evalSha: sha => this.withTimeout(this.client.customCommand(['EVALSHA', sha, ...scriptArgs])),
       evalScript: () =>
         this.withTimeout(this.client.customCommand(['EVAL', scriptBody, ...scriptArgs])),
-    });
+    };
   }
 
   async setNX(key: string, value: string, ttl: number): Promise<string | null> {
@@ -119,7 +114,7 @@ export class GlideAdapter extends BaseAdapter {
       }
       return this.normalizeGlideString(result);
     } catch (error) {
-      throw new Error(`Failed to acquire lock: ${(error as Error).message}`);
+      throw new Error(`Failed to acquire lock: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -135,7 +130,7 @@ export class GlideAdapter extends BaseAdapter {
       }
       return this.normalizeGlideString(result);
     } catch (error) {
-      throw new Error(`Failed to get key: ${(error as Error).message}`);
+      throw new Error(`Failed to get key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -148,7 +143,7 @@ export class GlideAdapter extends BaseAdapter {
       // GLIDE del takes an array of keys
       return await this.withTimeout(this.client.del([prefixedKey]));
     } catch (error) {
-      throw new Error(`Failed to delete key: ${(error as Error).message}`);
+      throw new Error(`Failed to delete key: ${(error as Error).message}`, { cause: error });
     }
   }
 
@@ -248,7 +243,7 @@ export class GlideAdapter extends BaseAdapter {
       const result = await this.withTimeout(this.client.customCommand(['PING']));
       return result as string;
     } catch (error) {
-      throw new Error(`Ping failed: ${(error as Error).message}`);
+      throw new Error(`Ping failed: ${(error as Error).message}`, { cause: error });
     }
   }
 

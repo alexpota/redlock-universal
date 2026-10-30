@@ -238,7 +238,7 @@ const adapter = new NodeRedisAdapter(client, { keyPrefix: 'myapp:' });
 // The lock key 'orders:42' is stored in Redis as 'myapp:orders:42'
 ```
 
-Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. Errors and logs report the lock key without the adapter's prefix, except the message of `signal.error` after a failed extension, which shows the key as stored.
+Set the prefix on the adapter or on the client (ioredis `keyPrefix`, node-redis 6.1+ `keyPrefix`), not both: the two prefixes are combined. `IoredisAdapter` emits a one-time process warning (`REDLOCK_UNIVERSAL_DOUBLE_KEY_PREFIX`) when both are set. Errors and logs report the lock key without the adapter's prefix, except the message of `signal.error` after a failed extension, which shows the key as stored.
 
 ## Configuration
 
@@ -418,7 +418,7 @@ const lock = createLock({ adapter, key: 'resource', performance: 'lean' });
 const lock = createLock({ adapter, key: 'resource', performance: 'enterprise' });
 ```
 
-`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). It does not validate its configuration or check handles, and it builds lock values from a timestamp, `Math.random()` and the process ID instead of `crypto`.
+`lean` keeps `using()` and auto-extension, but it has no circuit breaker, health check or logger (the `circuitBreaker` and `logger` options are ignored). Apart from rejecting a TTL too short to ever be acquired, it does not validate its configuration or check handles.
 
 </details>
 
@@ -434,9 +434,8 @@ SimpleLock includes a built-in circuit breaker that fast-fails when Redis is per
 const lock = createLock({
   adapter, key: 'resource',
   circuitBreaker: {
-    failureThreshold: 5,       // Consecutive failures to trip (default: 5)
-    resetTimeout: 60000,       // Ms before probing recovery (default: 60000)
-    healthCheckInterval: 30000 // Ms between health checks (default: 30000)
+    failureThreshold: 5,  // Consecutive failures to trip (default: 5)
+    resetTimeout: 60000,  // Ms before probing recovery (default: 60000)
   }
 });
 
@@ -450,7 +449,7 @@ const health = (lock as SimpleLock).getHealth();
 
 The circuit breaker is available in `standard` and `enterprise` performance modes. The `lean` mode omits it for minimal memory overhead.
 
-Each lock instance has its own breaker. It health-checks the server with a `PING` before its first `acquire()`, then at most once per `healthCheckInterval`. A failed health check counts as a failure but does not fail the `acquire()`.
+Each lock instance has its own breaker. It counts failed lock commands; there is no separate `PING`, so the first `acquire()` against a server that is down fails after one command timeout. `getHealth()` reports the outcome of the lock's latest command, and `lastCheck` is when it arrived. The `healthCheckInterval` option is still accepted but has no effect.
 
 </details>
 
@@ -603,7 +602,7 @@ npm run test:docker         # Starts Redis and Valkey containers, then runs the 
 > **Lock not releasing?** `release()` returns `false` when the lock already expired or another client holds it. Release with the handle that `acquire()` returned.
 
 > [!WARNING]
-> **High P99 latency?** Check Redis server load and network latency. Reuse lock instances: each new instance sends a health-check `PING` before its first `acquire()`, unless you pass `circuitBreaker: false`.
+> **High P99 latency?** Check Redis server load and network latency.
 
 ## Migration
 

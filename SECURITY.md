@@ -52,7 +52,7 @@ For what a lock does and does not guarantee, see [SAFETY.md](SAFETY.md).
 
 ### Security Features
 
-- **Random lock values:** `SimpleLock`, `RedLock` and `LockManager` generate lock values with Node.js `crypto.randomFillSync`. The `lean` performance mode builds them from a timestamp, `Math.random()` and the process ID instead.
+- **Random lock values:** every lock type, the `lean` performance mode included, generates lock values with Node.js `crypto.randomUUID` (122 random bits).
 - **Owner-checked release and extension:** a lock is only released or extended when its stored value matches the handle's value, checked atomically in a Lua script.
 - **Expiring locks:** every lock is written with a TTL, so a lock held by a crashed process expires.
 - **No lock values in logs:** lock values are not passed to the logger.

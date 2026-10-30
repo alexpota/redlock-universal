@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Logger, LogLevel } from '../../../src/monitoring/Logger.js';
+import { SimpleLock } from '../../../src/locks/SimpleLock.js';
+import type { RedisAdapter } from '../../../src/types/adapters.js';
 
 describe('Logger', () => {
   let logger: Logger;
@@ -126,6 +128,45 @@ describe('Logger', () => {
 
       logger.info('Test message');
       expect(console.info).toHaveBeenCalled();
+    });
+
+    it('should not repeat the context or error of an earlier call', () => {
+      logger = new Logger({ level: LogLevel.DEBUG, enableConsole: true, enableCollection: false });
+      const error = new Error('boom');
+
+      logger.error('a', error, { key: 'k1' });
+      logger.warn('b');
+
+      const warnCalls = vi.mocked(console.warn).mock.calls;
+      expect(warnCalls).toHaveLength(1);
+      expect(String(warnCalls[0]![0])).not.toContain('k1');
+      expect(warnCalls.flat()).not.toContain(error);
+    });
+
+    it('should print each lock key only on that lock’s lines', async () => {
+      logger = new Logger({ level: LogLevel.DEBUG, enableConsole: true, enableCollection: false });
+      const createAdapter = (): RedisAdapter =>
+        ({
+          setNX: vi.fn().mockRejectedValue(new Error('Redis down')),
+          delIfMatch: vi.fn().mockResolvedValue(false),
+        }) as unknown as RedisAdapter;
+      const acquireFailing = (key: string): Promise<unknown> =>
+        new SimpleLock({ adapter: createAdapter(), key, logger, retryAttempts: 0 })
+          .acquire()
+          .catch(() => undefined);
+
+      await acquireFailing('lock-a');
+      await acquireFailing('lock-b');
+
+      const lines = vi
+        .mocked(console.error)
+        .mock.calls.map(call => call[0])
+        .filter((line): line is string => typeof line === 'string');
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain('lock-a');
+      expect(lines[0]).not.toContain('lock-b');
+      expect(lines[1]).toContain('lock-b');
+      expect(lines[1]).not.toContain('lock-a');
     });
   });
 
