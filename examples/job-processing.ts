@@ -6,6 +6,7 @@
  * lock extension for long-running jobs.
  */
 
+import { pathToFileURL } from 'node:url';
 import { createLock, IoredisAdapter } from 'redlock-universal';
 import { Redis } from 'ioredis';
 
@@ -169,7 +170,7 @@ async function jobProcessingWithProgress() {
 }
 
 // Run the example
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   jobProcessingWithProgress()
     .then(() => console.log('Example completed'))
     .catch(console.error);

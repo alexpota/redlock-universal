@@ -3,6 +3,7 @@
  * Demonstrates distributed locking across multiple Redis instances
  */
 
+import { pathToFileURL } from 'node:url';
 import { createClient as createRedisClient } from 'redis';
 import { Redis } from 'ioredis';
 import {
@@ -381,6 +382,6 @@ export {
 };
 
 // Run examples if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   runAllExamples().catch(console.error);
 }

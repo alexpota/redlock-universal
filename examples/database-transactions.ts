@@ -6,6 +6,7 @@
  * consistency in distributed systems.
  */
 
+import { pathToFileURL } from 'node:url';
 import { createLock, NodeRedisAdapter } from 'redlock-universal';
 import { createClient } from 'redis';
 
@@ -86,7 +87,7 @@ async function protectedBankTransfer() {
 }
 
 // Run the example
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   protectedBankTransfer()
     .then(() => console.log('Example completed'))
     .catch(console.error);

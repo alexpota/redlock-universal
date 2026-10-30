@@ -6,6 +6,7 @@
  * automatic lock extension for long-running operations.
  */
 
+import { pathToFileURL } from 'node:url';
 import { createRedlock, NodeRedisAdapter } from 'redlock-universal';
 import { createClient } from 'redis';
 
@@ -123,7 +124,7 @@ async function distributedCacheWarming() {
 }
 
 // Run the example
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   distributedCacheWarming()
     .then(() => console.log('Example completed'))
     .catch(console.error);
