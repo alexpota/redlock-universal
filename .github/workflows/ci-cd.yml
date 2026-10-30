@@ -24,21 +24,29 @@ jobs:
         ports:
           - 6379:6379
         options: >-
-          --health-cmd "${{ matrix.server.health-cmd }}"
+          --health-cmd "${{ matrix.server.kind }}-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     strategy:
       matrix:
-        node-version: [22.x, 23.x]
+        node-version: [22.x, 24.x, 26.x]
+        # `name` is part of the required check names ("Test (redis, Node 22.x)"); `kind`
+        # selects the CLI and the GLIDE adapter suite, which runs only against Valkey
         server:
           - name: redis
+            kind: redis
             image: redis:7-alpine
-            health-cmd: redis-cli ping
+          - name: redis-8
+            kind: redis
+            image: redis:8-alpine
           - name: valkey
+            kind: valkey
             image: valkey/valkey:8-alpine
-            health-cmd: valkey-cli ping
+          - name: valkey-9
+            kind: valkey
+            image: valkey/valkey:9-alpine
       fail-fast: false
 
     steps:
@@ -72,7 +80,7 @@ jobs:
       run: npm run build
 
     - name: Check package exports
-      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
+      if: matrix.node-version == '24.x' && matrix.server.name == 'redis-8'
       run: npm run lint:package
 
     - name: Test - Unit
@@ -82,17 +90,17 @@ jobs:
       run: npm run test:integration
       env:
         NODE_ENV: test
-        TEST_SERVER: ${{ matrix.server.name }}
+        TEST_SERVER: ${{ matrix.server.kind }}
         VALKEY_HOST: localhost
         VALKEY_PORT: 6379
 
     - name: Test - Coverage
       run: npm run test:coverage
-      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
+      if: matrix.node-version == '24.x' && matrix.server.name == 'redis-8'
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-      if: matrix.node-version == '22.x' && matrix.server.name == 'redis'
+      if: matrix.node-version == '24.x' && matrix.server.name == 'redis-8'
       with:
         fail_ci_if_error: false
 
