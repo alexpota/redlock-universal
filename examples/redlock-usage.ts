@@ -14,7 +14,7 @@ import {
   type LockHandle,
   type Lock,
   RedLock,
-} from '../src/index.js';
+} from 'redlock-universal';
 
 /**
  * Example 1: Basic RedLock with node-redis clients

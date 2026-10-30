@@ -2,7 +2,7 @@
 // Demonstrates using redlock-universal with Valkey's official GLIDE client
 
 import { GlideClient, GlideClientConfiguration } from '@valkey/valkey-glide';
-import { GlideAdapter, createLock } from '../src/index.js';
+import { GlideAdapter, createLock } from 'redlock-universal';
 
 const VALKEY_HOST = process.env.VALKEY_HOST ?? 'localhost';
 const VALKEY_PORT = Number(process.env.VALKEY_PORT ?? 6379);

@@ -3,7 +3,7 @@
 
 import { createClient as createNodeRedisClient } from 'redis';
 import { Redis } from 'ioredis';
-import { createLock, NodeRedisAdapter, IoredisAdapter } from '../src/index.js';
+import { createLock, NodeRedisAdapter, IoredisAdapter } from 'redlock-universal';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const STATUS_CHECK_RESOURCE = 'status-check-resource';

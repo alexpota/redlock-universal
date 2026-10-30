@@ -3,7 +3,7 @@
 
 import { createClient as createNodeRedisClient } from 'redis';
 import { Redis } from 'ioredis';
-import { NodeRedisAdapter, IoredisAdapter } from '../src/index.js';
+import { NodeRedisAdapter, IoredisAdapter } from 'redlock-universal';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const UNIQUE_VALUE = 'unique-value';

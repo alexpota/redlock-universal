@@ -7,7 +7,7 @@
 
 import * as bunyan from 'bunyan';
 import { createClient } from 'redis';
-import { createRedlock, createBunyanAdapter, NodeRedisAdapter } from '../src/index.js';
+import { createRedlock, createBunyanAdapter, NodeRedisAdapter } from 'redlock-universal';
 
 async function main() {
   // Create Bunyan logger

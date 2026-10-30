@@ -41,7 +41,7 @@
 
 import { Redis, Cluster } from 'ioredis';
 import { createClient, createCluster } from 'redis';
-import { IoredisAdapter, NodeRedisAdapter, createLock, createRedlock } from '../src/index.js';
+import { IoredisAdapter, NodeRedisAdapter, createLock, createRedlock } from 'redlock-universal';
 
 // ============================================================================
 // APPROACH 1: Single Redis Cluster (Simpler, HA via cluster replication)

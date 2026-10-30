@@ -8,7 +8,7 @@
  * and remaining TTL in a single Redis operation using a Lua script.
  */
 
-import { NodeRedisAdapter, createLock } from '../src/index.js';
+import { NodeRedisAdapter, createLock } from 'redlock-universal';
 import { createClient } from 'redis';
 
 // Setup Redis connection
