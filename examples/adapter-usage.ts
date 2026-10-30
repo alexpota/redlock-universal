@@ -3,7 +3,7 @@
 
 import { createClient as createNodeRedisClient } from 'redis';
 import { Redis } from 'ioredis';
-import { NodeRedisAdapter, IoredisAdapter } from '../src/adapters/index.js';
+import { NodeRedisAdapter, IoredisAdapter } from '../src/index.js';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const UNIQUE_VALUE = 'unique-value';
@@ -60,6 +60,7 @@ async function ioredisExample() {
 async function universalExample() {
   // Works with either client type
   const nodeRedisClient = createNodeRedisClient({ url: REDIS_URL });
+  await nodeRedisClient.connect();
   const ioredisClient = new Redis(REDIS_URL);
 
   const nodeAdapter = NodeRedisAdapter.from(nodeRedisClient);
@@ -74,6 +75,9 @@ async function universalExample() {
       await adapter.delIfMatch('test-lock', 'value');
     }
   }
+
+  await nodeRedisClient.disconnect();
+  ioredisClient.disconnect();
 }
 
 // Example 4: Error handling

@@ -86,7 +86,7 @@ async function protectedBankTransfer() {
 }
 
 // Run the example
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   protectedBankTransfer()
     .then(() => console.log('Example completed'))
     .catch(console.error);

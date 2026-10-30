@@ -169,7 +169,7 @@ async function jobProcessingWithProgress() {
 }
 
 // Run the example
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   jobProcessingWithProgress()
     .then(() => console.log('Example completed'))
     .catch(console.error);
