@@ -3,15 +3,16 @@
 
 import { GlideClient, GlideClientConfiguration } from '@valkey/valkey-glide';
 import { GlideAdapter, createLock } from '../src/index.js';
-import { getValkeyHost, getValkeyPort } from '../tests/shared/constants.js';
 
+const VALKEY_HOST = process.env.VALKEY_HOST ?? 'localhost';
+const VALKEY_PORT = Number(process.env.VALKEY_PORT ?? 6379);
 const UNIQUE_VALUE = 'unique-value';
 
 // Example 1: Basic GlideAdapter usage
 async function basicGlideExample() {
   // Create GLIDE client (async, unlike node-redis/ioredis)
   const config: GlideClientConfiguration = {
-    addresses: [{ host: getValkeyHost(), port: getValkeyPort() }],
+    addresses: [{ host: VALKEY_HOST, port: VALKEY_PORT }],
   };
   const client = await GlideClient.createClient(config);
 
@@ -34,7 +35,7 @@ async function basicGlideExample() {
 // Example 2: Using createLock factory with GLIDE
 async function factoryExample() {
   const config: GlideClientConfiguration = {
-    addresses: [{ host: getValkeyHost(), port: getValkeyPort() }],
+    addresses: [{ host: VALKEY_HOST, port: VALKEY_PORT }],
   };
   const client = await GlideClient.createClient(config);
   const adapter = new GlideAdapter(client);
@@ -58,7 +59,7 @@ async function factoryExample() {
 // Example 3: Using the using() API with auto-extension
 async function usingApiExample() {
   const config: GlideClientConfiguration = {
-    addresses: [{ host: getValkeyHost(), port: getValkeyPort() }],
+    addresses: [{ host: VALKEY_HOST, port: VALKEY_PORT }],
   };
   const client = await GlideClient.createClient(config);
   const adapter = new GlideAdapter(client);
@@ -88,7 +89,7 @@ async function usingApiExample() {
 // Example 4: Factory method pattern
 async function factoryMethodExample() {
   const config: GlideClientConfiguration = {
-    addresses: [{ host: getValkeyHost(), port: getValkeyPort() }],
+    addresses: [{ host: VALKEY_HOST, port: VALKEY_PORT }],
   };
   const client = await GlideClient.createClient(config);
 

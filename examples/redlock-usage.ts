@@ -4,7 +4,7 @@
  */
 
 import { createClient as createRedisClient } from 'redis';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import {
   createRedlock,
   createRedlocks,

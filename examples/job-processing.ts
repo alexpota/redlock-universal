@@ -7,7 +7,7 @@
  */
 
 import { createLock, IoredisAdapter } from 'redlock-universal';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 // Mock job interfaces
 interface JobItem {

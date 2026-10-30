@@ -39,7 +39,7 @@
  *   lock operations are safe (KEYS[1] only), but batch operations are not.
  */
 
-import Redis, { Cluster } from 'ioredis';
+import { Redis, Cluster } from 'ioredis';
 import { createClient, createCluster } from 'redis';
 import { IoredisAdapter, NodeRedisAdapter, createLock, createRedlock } from '../src/index.js';
 
