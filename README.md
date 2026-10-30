@@ -14,9 +14,12 @@ Distributed locks for Node.js on the Redis or Valkey you already run, with the c
 
 **node-redis** &bull; **ioredis** &bull; **Valkey GLIDE**
 
-Requires Node.js 22 or later. CI runs the test suite on Node.js 22, 24 and 26 with node-redis and ioredis against Redis 7 and 8 and Valkey 8 and 9, the Valkey GLIDE adapter tests against Valkey 8 and 9, and the cluster tests with all three clients against Redis 7 and 8 and Valkey 8 and 9 clusters.
+- **Atomic multi-key locks:** `LockManager.acquireBatch()` and `usingBatch()` take several keys on one server, all of them or none.
+- **Redis Cluster:** works with the Cluster clients of ioredis, node-redis and Valkey GLIDE.
+- <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS:** [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) adds decorators and dependency injection.
+- **Checked in 0.8.10:** grants that arrive after the lock's validity time are refused, and a fault-injection test of 240,000 lock attempts found no overlapping holders ([results](https://github.com/alexpota/redlock-universal/pull/152)).
 
-> <img src=".github/assets/nestjs-logo.png" width="18" height="18" alt="NestJS" style="vertical-align: middle;"> **NestJS Integration:** Check out [nestjs-redlock-universal](https://www.npmjs.com/package/nestjs-redlock-universal) for decorator-based integration with dependency injection.
+Requires Node.js 22 or later. CI runs the test suite on Node.js 22, 24 and 26 with node-redis and ioredis against Redis 7 and 8 and Valkey 8 and 9, the Valkey GLIDE adapter tests against Valkey 8 and 9, and the cluster tests with all three clients against Redis 7 and 8 and Valkey 8 and 9 clusters.
 
 ## Quick Start
 
@@ -217,6 +220,8 @@ import { GlideClusterClient } from '@valkey/valkey-glide';
 const cluster = await GlideClusterClient.createClient({ addresses: [{ host: 'node-1', port: 6379 }] });
 const adapter = new GlideAdapter(cluster);
 ```
+
+The Valkey GLIDE adapter is `GlideAdapter`; there is no `ValkeyGlideAdapter`.
 
 On a cluster, the keys passed to `acquireBatch()` or `usingBatch()` are written by one script, so they must hash to one slot. Give them a shared hash tag, such as `{order:42}:payment` and `{order:42}:stock`.
 
@@ -532,7 +537,7 @@ async function getOrCompute(key: string, compute: () => Promise<string>): Promis
     key: `lock:${key}`, // never lock the cache key itself
     ttl: 10_000,
     retryAttempts: 0,
-    circuitBreaker: false, // a new lock per call: skip the health-check PING
+    circuitBreaker: false, // a lock used once gains nothing from a breaker
   });
   const deadline = Date.now() + 10_000;
 
@@ -561,7 +566,7 @@ async function getOrCompute(key: string, compute: () => Promise<string>): Promis
 ```
 
 **Q: Should I create one lock instance, or one per call?**
-Either works. The lock lives in Redis under its key, and every `acquire()` generates a new lock value. With the circuit breaker on (the default), each instance health-checks the server with a `PING` before its first `acquire()` and counts failures on its own. If you create an instance per call, for example per request, pass `circuitBreaker: false` so that each call sends only the lock commands. `LockManager.acquireLock()` creates a new instance on every call.
+Either works. The lock lives in Redis under its key, and every `acquire()` generates a new lock value. Each instance has its own circuit breaker, which counts that instance's failed lock commands, so it only fast-fails calls on an instance that you reuse. `LockManager.acquireLock()` creates a new instance on every call.
 
 **Q: Why does `instanceof LockAcquisitionError` return `false`?**
 The package ships separate ESM and CommonJS builds, and each build has its own error classes. When both builds are loaded in one process, for example ESM application code next to a CommonJS dependency that also uses redlock-universal, an error from one build is not an instance of the other build's class. Compare the name (or `code`) instead:
@@ -626,6 +631,8 @@ const handle = await redlock.acquire();
 await redlock.release(handle);
 ```
 
+The [migration guide](MIGRATION.md) maps the rest of the API, the settings and the errors.
+
 </details>
 
 <details>
@@ -662,6 +669,7 @@ With the `mutex:` prefix, both libraries use the same Redis key, so they exclude
 ## Links
 
 - [Safety Guide](./SAFETY.md)
+- [Migrating from node-redlock](./MIGRATION.md)
 - [Examples](https://github.com/alexpota/redlock-universal/tree/main/examples)
 - [Valkey Setup Guide](./VALKEY.md)
 - [Redis Cluster Examples](./examples/redis-cluster-usage.ts)

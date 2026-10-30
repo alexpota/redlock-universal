@@ -5,7 +5,7 @@
  */
 
 import { createClient } from 'redis';
-import { LockManager, NodeRedisAdapter, LockAcquisitionError } from '../src/index.js';
+import { LockManager, NodeRedisAdapter, LockAcquisitionError } from 'redlock-universal';
 
 async function main() {
   const client = createClient({ url: 'redis://localhost:6379' });

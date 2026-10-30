@@ -11,6 +11,8 @@ This directory contains practical examples demonstrating how to use redlock-univ
    npm install redlock-universal ioredis
    ```
 
+   In a clone of this repository, run `npm install` and `npm run build` instead: the examples import `redlock-universal`, which then resolves to the package's own build in `dist/`.
+
 2. **Redis Setup**:
    - Single instance: Redis running on `localhost:6379`
    - Distributed examples: Redis instances on ports `6379`, `6380`, `6381`

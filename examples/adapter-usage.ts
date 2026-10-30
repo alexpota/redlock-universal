@@ -1,18 +1,17 @@
 // Examples showing how Redis adapter pattern should work
-// This file demonstrates the ideal API we want to achieve
 
 import { createClient as createNodeRedisClient } from 'redis';
-import Redis from 'ioredis';
-import { NodeRedisAdapter, IoredisAdapter } from '../src/adapters/index.js';
-import { getRedisUrl } from '../tests/shared/constants.js';
+import { Redis } from 'ioredis';
+import { NodeRedisAdapter, IoredisAdapter } from 'redlock-universal';
 
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const UNIQUE_VALUE = 'unique-value';
 
 // Example 1: Using node-redis v4+ client
 async function nodeRedisExample() {
   // User creates their Redis client
   const client = createNodeRedisClient({
-    url: getRedisUrl(),
+    url: REDIS_URL,
   });
   await client.connect();
 
@@ -59,8 +58,9 @@ async function ioredisExample() {
 // Example 3: Universal factory function
 async function universalExample() {
   // Works with either client type
-  const nodeRedisClient = createNodeRedisClient({ url: getRedisUrl() });
-  const ioredisClient = new Redis(getRedisUrl());
+  const nodeRedisClient = createNodeRedisClient({ url: REDIS_URL });
+  await nodeRedisClient.connect();
+  const ioredisClient = new Redis(REDIS_URL);
 
   const nodeAdapter = NodeRedisAdapter.from(nodeRedisClient);
   const ioAdapter = IoredisAdapter.from(ioredisClient);
@@ -74,11 +74,14 @@ async function universalExample() {
       await adapter.delIfMatch('test-lock', 'value');
     }
   }
+
+  await nodeRedisClient.disconnect();
+  ioredisClient.disconnect();
 }
 
 // Example 4: Error handling
 async function errorHandlingExample() {
-  const client = new Redis(getRedisUrl());
+  const client = new Redis(REDIS_URL);
   const adapter = new IoredisAdapter(client);
 
   try {

@@ -8,7 +8,7 @@
  * ⚠️ TESTING ONLY: Not for production use!
  */
 
-import { MemoryAdapter, SimpleLock, createLock } from '../src/index.js';
+import { MemoryAdapter, SimpleLock, createLock } from 'redlock-universal';
 
 // Example 1: Basic Setup
 console.log('Example 1: Basic MemoryAdapter Usage');

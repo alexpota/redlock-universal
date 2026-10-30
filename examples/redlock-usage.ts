@@ -3,8 +3,9 @@
  * Demonstrates distributed locking across multiple Redis instances
  */
 
+import { pathToFileURL } from 'node:url';
 import { createClient as createRedisClient } from 'redis';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import {
   createRedlock,
   createRedlocks,
@@ -14,7 +15,7 @@ import {
   type LockHandle,
   type Lock,
   RedLock,
-} from '../src/index.js';
+} from 'redlock-universal';
 
 /**
  * Example 1: Basic RedLock with node-redis clients
@@ -381,6 +382,6 @@ export {
 };
 
 // Run examples if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) {
   runAllExamples().catch(console.error);
 }

@@ -7,7 +7,7 @@
 
 import pino from 'pino';
 import { createClient } from 'redis';
-import { createLock, createPinoAdapter, NodeRedisAdapter } from '../src/index.js';
+import { createLock, createPinoAdapter, NodeRedisAdapter } from 'redlock-universal';
 
 async function main() {
   // Create Pino logger
