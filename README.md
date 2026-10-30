@@ -537,7 +537,7 @@ async function getOrCompute(key: string, compute: () => Promise<string>): Promis
     key: `lock:${key}`, // never lock the cache key itself
     ttl: 10_000,
     retryAttempts: 0,
-    circuitBreaker: false, // a new lock per call: skip the health-check PING
+    circuitBreaker: false, // a lock used once gains nothing from a breaker
   });
   const deadline = Date.now() + 10_000;
 
@@ -566,7 +566,7 @@ async function getOrCompute(key: string, compute: () => Promise<string>): Promis
 ```
 
 **Q: Should I create one lock instance, or one per call?**
-Either works. The lock lives in Redis under its key, and every `acquire()` generates a new lock value. With the circuit breaker on (the default), each instance health-checks the server with a `PING` before its first `acquire()` and counts failures on its own. If you create an instance per call, for example per request, pass `circuitBreaker: false` so that each call sends only the lock commands. `LockManager.acquireLock()` creates a new instance on every call.
+Either works. The lock lives in Redis under its key, and every `acquire()` generates a new lock value. Each instance has its own circuit breaker, which counts that instance's failed lock commands, so it only fast-fails calls on an instance that you reuse. `LockManager.acquireLock()` creates a new instance on every call.
 
 **Q: Why does `instanceof LockAcquisitionError` return `false`?**
 The package ships separate ESM and CommonJS builds, and each build has its own error classes. When both builds are loaded in one process, for example ESM application code next to a CommonJS dependency that also uses redlock-universal, an error from one build is not an instance of the other build's class. Compare the name (or `code`) instead:
